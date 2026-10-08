@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEST DATA ONLY: shaped like feed.xml of monteur-podcast.de, values are invented. -->
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Der Monteur-Podcast (Test)</title>
+    <item>
+      <title>Folge 01: Warum Monteure?</title>
+      <guid isPermaLink="false">test-guid-1</guid>
+      <pubDate>Tue, 01 Sep 2026 06:00:00 +0200</pubDate>
+      <enclosure url="https://monteur-podcast.de/media/folge-01.mp3" length="29616000" type="audio/mpeg"/>
+      <itunes:episode>1</itunes:episode>
+      <itunes:duration>20:34</itunes:duration>
+    </item>
+    <item>
+      <title>Folge 02: Der richtige Standort</title>
+      <guid isPermaLink="false">test-guid-2</guid>
+      <pubDate>Sat, 05 Sep 2026 06:00:00 +0200</pubDate>
+      <enclosure url="https://monteur-podcast.de/media/folge-02.mp3" length="89352000" type="audio/mpeg"/>
+      <itunes:duration>1:02:03</itunes:duration>
+    </item>
+    <item>
+      <title>Folge 03: Geplant</title>
+      <guid isPermaLink="false">test-guid-3</guid>
+      <pubDate>Mon, 12 Oct 2026 06:00:00 +0200</pubDate>
+      <enclosure url="https://monteur-podcast.de/media/folge-03.mp3" length="1000" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>

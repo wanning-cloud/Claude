@@ -1,0 +1,4 @@
+{"feed":{"author":{"name":{"label":"iTunes Store"}},"entry":[
+{"author":{"name":{"label":"TEST Hörer 1"}},"updated":{"label":"2026-10-06T09:12:00-07:00"},"im:rating":{"label":"5"},"im:version":{"label":""},"id":{"label":"100000001"},"title":{"label":"Endlich jemand mit Praxis"},"content":{"label":"TEST DATA. Kurze Folgen, klare Zahlen.","attributes":{"type":"text"}}},
+{"author":{"name":{"label":"TEST Hörer 2"}},"updated":{"label":"2026-10-04T18:00:00-07:00"},"im:rating":{"label":"4"},"im:version":{"label":""},"id":{"label":"100000002"},"title":{"label":"Gut"},"content":{"label":"TEST DATA. Mehr zu Steuern bitte.","attributes":{"type":"text"}}}
+]}}

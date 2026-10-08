@@ -1,0 +1,34 @@
+{
+  "name": "podcast-cockpit",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "dev:api": "php -S 127.0.0.1:8787 -t apps/api/public apps/api/public/router-dev.php",
+    "build": "npm run build -w packages/shared && npm run schema && npm run build -w apps/web",
+    "schema": "npm run schema -w packages/shared",
+    "lint": "eslint . && prettier --check . && tsc -b && php apps/api/bin/lint.php",
+    "format": "prettier --write .",
+    "test": "npm run schema && vitest run && composer --working-dir=apps/api test",
+    "test:e2e": "playwright test",
+    "secrets": "gitleaks detect --no-banner"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.4",
+    "eslint": "^10.12.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  }
+}

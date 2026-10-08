@@ -1,0 +1,2 @@
+# Deployed as api/app/.htaccess: code, schema, data and env are never served.
+Require all denied
