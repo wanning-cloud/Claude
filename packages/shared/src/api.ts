@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import type { Platform } from './platforms.ts';
 
 /** Response and request contracts of the PHP API under /api. */
@@ -10,8 +9,7 @@ export interface DateRange {
   to: string;
 }
 
-export const RangePreset = z.enum(['7', '28', '90', 'all', 'custom']);
-export type RangePreset = z.infer<typeof RangePreset>;
+export type RangePreset = '7' | '28' | '90' | 'all' | 'custom';
 
 export interface DataStamp {
   /** ISO timestamp of the newest data for this source, null if never fetched. */
@@ -101,8 +99,7 @@ export interface PlatformPage {
   notes: string[];
 }
 
-export const CommentStatus = z.enum(['new', 'answered', 'done', 'later']);
-export type CommentStatus = z.infer<typeof CommentStatus>;
+export type CommentStatus = 'new' | 'answered' | 'done' | 'later';
 
 export const COMMENT_STATUS_LABEL: Record<CommentStatus, string> = {
   new: 'Neu',
@@ -148,14 +145,14 @@ export interface CommentList {
   newCount: number;
 }
 
-export const CommentPatch = z.object({
-  status: CommentStatus.optional(),
-  note: z.string().max(4000).nullable().optional(),
-});
-export type CommentPatch = z.infer<typeof CommentPatch>;
+export interface CommentPatch {
+  status?: CommentStatus;
+  note?: string | null;
+}
 
-export const ReplyRequest = z.object({ text: z.string().trim().min(1).max(10000) });
-export type ReplyRequest = z.infer<typeof ReplyRequest>;
+export interface ReplyRequest {
+  text: string;
+}
 
 export interface SyncSourceState {
   id: string;
@@ -216,7 +213,15 @@ export interface ImportPreview {
   ok: boolean;
   errors: string[];
   duplicate: boolean;
-  summary: { episodes: number; comments: number; replies: number; unknownEpisodes: string[] };
+  summary: {
+    episodes: number;
+    comments: number;
+    replies: number;
+    unknownEpisodes: string[];
+    /** Recognised CSV export, e.g. "spotify_performance". */
+    profile?: string | null;
+    period?: DateRange | null;
+  };
   checksum: string;
 }
 

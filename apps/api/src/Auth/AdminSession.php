@@ -9,10 +9,9 @@ use Cockpit\Http\HttpException;
 use Cockpit\Http\Request;
 
 /**
- * One login: the API lives under the same domain as podcast-admin and reads its PHP session
- * (read-only, never writes to it). ADMIN_SESSION_NAME is the session cookie name, ADMIN_SESSION_KEY
- * the $_SESSION key that is set when an admin is logged in. Both must be confirmed against the
- * podcast-admin code before go-live (see docs/stufe-0.md).
+ * One login: the API lives under /podcast-admin/ and reads the session of the upload helper
+ * (read-only, never writes to it). podcast-admin/index.php uses session_name('mp_admin') with the
+ * cookie path /podcast-admin/ and sets $_SESSION['ok'] = true after login (docs/podcast-admin-analyse.md).
  *
  * Writes additionally need an X-CSRF-Token header: HMAC of the session id, so nothing is stored.
  */
@@ -48,9 +47,9 @@ final class AdminSession
 
     private function readAdminSession(): void
     {
-        $name = $this->config->get('ADMIN_SESSION_NAME', 'PHPSESSID');
-        $key = $this->config->get('ADMIN_SESSION_KEY');
-        if ($key === null || !isset($_COOKIE[$name]) || !preg_match('/^[A-Za-z0-9,-]{16,128}$/', (string) $_COOKIE[$name])) {
+        $name = $this->config->get('ADMIN_SESSION_NAME', 'mp_admin');
+        $key = $this->config->get('ADMIN_SESSION_KEY', 'ok');
+        if (!isset($_COOKIE[$name]) || !preg_match('/^[A-Za-z0-9,-]{16,128}$/', (string) $_COOKIE[$name])) {
             return;
         }
         session_name($name);
@@ -60,7 +59,7 @@ final class AdminSession
             $value = is_array($value) ? ($value[$part] ?? null) : null;
         }
         if ($value) {
-            $this->user = is_string($value) ? $value : 'admin';
+            $this->user = is_string($value) ? $value : 'Markus';
             $this->sessionId = session_id() ?: null;
         }
     }

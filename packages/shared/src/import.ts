@@ -6,9 +6,7 @@ import { z } from 'zod';
  * JSON Schema to apps/api/schema/import.schema.json, which the PHP API validates against.
  */
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD');
-const isoDateTime = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/, 'ISO 8601 mit Zeitzone');
+const isoDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/, 'ISO 8601 mit Zeitzone');
 const count = z.number().int().min(0);
 
 export const ImportSource = z.enum(['spotify', 'apple', 'amazon', 'deezer']);

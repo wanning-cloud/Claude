@@ -85,7 +85,7 @@ final class SpotifyCsv
     public static function date(string $value): ?string
     {
         $value = trim($value);
-        foreach (['Y-m-d', 'd.m.Y', 'm/d/Y', 'Y/m/d', 'Y-m-d H:i:s', 'Y-m-d\TH:i:s'] as $format) {
+        foreach (['Y-m-d', 'd.m.Y', 'j.n.Y', 'm/d/Y', 'Y/m/d', 'Y-m-d H:i:s', 'Y-m-d\TH:i:s'] as $format) {
             $d = \DateTimeImmutable::createFromFormat('!' . $format, $value);
             if ($d !== false && $d->format($format) === $value) {
                 return $d->format('Y-m-d');

@@ -1,16 +1,5 @@
-import { z } from 'zod';
-
-export const PLATFORMS = [
-  'youtube',
-  'spotify',
-  'downloads',
-  'website',
-  'apple',
-  'amazon',
-  'deezer',
-] as const;
-export const Platform = z.enum(PLATFORMS);
-export type Platform = z.infer<typeof Platform>;
+export const PLATFORMS = ['youtube', 'spotify', 'downloads', 'website', 'apple', 'amazon', 'deezer'] as const;
+export type Platform = (typeof PLATFORMS)[number];
 
 export interface PlatformInfo {
   id: Platform;

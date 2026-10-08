@@ -47,7 +47,7 @@ final class AppleReviewsConnector implements Connector
                     break; // past the last page
                 }
                 if ($res['status'] !== 200) {
-                    throw new \RuntimeException("Apple-Bewertungen ({$cc}) nicht erreichbar (HTTP {$res['status']}).");
+                    throw new \RuntimeException("Der Bewertungs-Feed von Apple ({$cc}) antwortet nicht (HTTP {$res['status']}). Nächster Versuch beim nächsten Lauf.");
                 }
                 $reviews = self::parse($res['body']);
                 $known = 0;

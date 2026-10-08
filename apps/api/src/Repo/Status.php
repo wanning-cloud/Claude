@@ -153,7 +153,7 @@ final class Status
         }
         $pending = (int) $this->db->value("SELECT COUNT(*) FROM episode_aliases WHERE status = 'pending'");
         if ($pending > 0) {
-            $out[] = ['level' => 'warn', 'text' => "{$pending} Folgen aus Portal-Daten warten auf deine Zuordnung (Automatik › Zuordnung)."];
+            $out[] = ['level' => 'warn', 'text' => ($pending === 1 ? 'Eine Folge' : "{$pending} Folgen") . ' aus Portal-Daten ' . ($pending === 1 ? 'wartet' : 'warten') . ' auf deine Zuordnung (Automatik › Zuordnung von Folgen).'];
         }
         return $out;
     }

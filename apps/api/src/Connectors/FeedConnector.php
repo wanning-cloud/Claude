@@ -45,7 +45,44 @@ final class FeedConnector implements Connector
                 );
             }
         });
-        return new SyncOutcome(count($items), count($items) . ' Folgen im Feed.');
+        $posters = $this->posters();
+        foreach ($posters as $number => $url) {
+            $this->db->run('UPDATE episodes SET thumbnail_url = ? WHERE number = ?', [$url, $number]);
+        }
+        return new SyncOutcome(count($items), count($items) . ' Folgen im Feed.' . ($posters === [] ? ' Vorschaubilder aus folgen.js nicht gefunden.' : ''));
+    }
+
+    /**
+     * Episode posters come from podcast/folgen.js of the website (written by the upload helper,
+     * file names carry a version). Read only; a missing file is not an error.
+     * @return array<int, string> episode number → absolute URL
+     */
+    private function posters(): array
+    {
+        $base = preg_replace('#/[^/]*$#', '/', $this->feedUrl) ?? $this->feedUrl;
+        try {
+            $res = $this->http->request('GET', $base . 'podcast/folgen.js');
+        } catch (\RuntimeException) {
+            return [];
+        }
+        return $res['status'] === 200 ? self::parsePosters($res['body'], $base) : [];
+    }
+
+    /** @return array<int, string> */
+    public static function parsePosters(string $js, string $base): array
+    {
+        if (!preg_match('/MP_FOLGEN\s*=\s*(\{.*\})\s*;?\s*$/s', $js, $m)) {
+            return [];
+        }
+        $data = json_decode($m[1], true);
+        $out = [];
+        foreach (is_array($data) ? ($data['episodes'] ?? []) : [] as $episode) {
+            $poster = (string) ($episode['poster'] ?? '');
+            if (isset($episode['nr']) && $poster !== '' && !str_contains($poster, '..')) {
+                $out[(int) $episode['nr']] = str_starts_with($poster, 'https://') ? $poster : $base . ltrim($poster, '/');
+            }
+        }
+        return $out;
     }
 
     /**

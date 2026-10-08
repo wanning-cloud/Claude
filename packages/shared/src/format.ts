@@ -15,7 +15,7 @@ export function formatNumber(value: number | null | undefined): string {
 /** Change against the previous period, e.g. "+12 %". Null when either side is missing or previous is 0. */
 export function formatChange(value: number | null, previous: number | null): string | null {
   if (value === null || previous === null || previous === 0) return null;
-  return pctFmt.format((value - previous) / previous).replace(/ /g, ' ');
+  return pctFmt.format((value - previous) / previous).replace(/\u00a0/g, ' ');
 }
 
 /** Accepts "YYYY-MM-DD" (calendar date) or a full ISO timestamp. */

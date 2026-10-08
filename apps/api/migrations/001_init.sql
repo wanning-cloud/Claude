@@ -11,6 +11,7 @@ CREATE TABLE episodes (
   mp3_path TEXT NOT NULL,
   bytes INTEGER,
   duration_s INTEGER,
+  thumbnail_url TEXT,
   youtube_video_id TEXT,
   youtube_manual INTEGER NOT NULL DEFAULT 0,
   updated_at TEXT NOT NULL

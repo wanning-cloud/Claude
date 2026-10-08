@@ -22,7 +22,7 @@ final class ImportService
     }
 
     /**
-     * @param array{type: string, content: string, source?: string, period?: array{from: string, to: string}|null} $input
+     * @param array{type: string, content: string, source?: string|null, period?: array{from: string, to: string}|null, fileName?: string|null} $input
      * @return array{ok: bool, errors: list<string>, duplicate: bool, summary: array{episodes: int, comments: int, replies: int, unknownEpisodes: list<string>}, checksum: string}
      */
     public function preview(array $input): array
@@ -49,12 +49,14 @@ final class ImportService
                 'comments' => count($parsed['comments']),
                 'replies' => count($parsed['replies']),
                 'unknownEpisodes' => array_keys($unknown),
+                'profile' => $parsed['profile'] ?? null,
+                'period' => $parsed['period'],
             ],
             'checksum' => $parsed['checksum'],
         ];
     }
 
-    /** @param array{type: string, content: string, source?: string, period?: array{from: string, to: string}|null} $input */
+    /** @param array{type: string, content: string, source?: string|null, period?: array{from: string, to: string}|null, fileName?: string|null} $input */
     public function commit(array $input, string $actor): array
     {
         $preview = $this->preview($input);
@@ -72,7 +74,13 @@ final class ImportService
             foreach ($parsed['episodes'] as $row) {
                 $episodeId = $row['title'] === null ? 0 : $matcher->resolve($source, $row['guid'], $row['title']);
                 foreach ($row['metrics'] as $metric => $value) {
-                    if ($row['date'] !== null) {
+                    if (!empty($row['total'])) {
+                        // Per-episode counters without a calendar period, e.g. Spotify plays in the first 7 days.
+                        $this->db->run(
+                            "INSERT OR REPLACE INTO metric_totals (episode_id, platform, metric, captured_at, value, ref) VALUES (?, ?, ?, ?, ?, '')",
+                            [$episodeId, $source, $metric, $parsed['capturedAt'], $value],
+                        );
+                    } elseif ($row['date'] !== null) {
                         $this->db->run(
                             'INSERT INTO metric_daily (episode_id, platform, metric, date, value, source, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?)
                              ON CONFLICT (episode_id, platform, metric, date) DO UPDATE SET value = excluded.value, source = excluded.source, imported_at = excluded.imported_at',
@@ -144,7 +152,7 @@ final class ImportService
     }
 
     /**
-     * @param array{type: string, content: string, source?: string, period?: array{from: string, to: string}|null} $input
+     * @param array{type: string, content: string, source?: string|null, period?: array{from: string, to: string}|null, fileName?: string|null} $input
      * @return array{errors: list<string>, checksum: string, source: string, kind: string, capturedAt: string, period: array{from: string, to: string}|null, followers: int|null,
      *   episodes: list<array{guid: string|null, title: string|null, date: string|null, metrics: array<string, int>}>,
      *   comments: list<array{external_ref: string, episode_title: string, author: string, text: string, posted_at: string}>,
@@ -161,7 +169,7 @@ final class ImportService
         }
         return match ($input['type'] ?? '') {
             'json' => $this->parseJson($content, $empty),
-            'csv' => $this->parseCsv($content, $input['period'] ?? null, $empty),
+            'csv' => $this->parseCsv($content, $input['period'] ?? null, (string) ($input['fileName'] ?? ''), $empty),
             default => ['errors' => ['Unbekannter Import-Typ. Erlaubt: json, csv.']] + $empty,
         };
     }
@@ -211,15 +219,42 @@ final class ImportService
         ] + $base;
     }
 
-    private function parseCsv(string $content, ?array $period, array $base): array
+    private function parseCsv(string $content, ?array $period, string $fileName, array $base): array
     {
         $base['source'] = 'spotify';
+        try {
+            $csv = SpotifyCsv::read($content);
+        } catch (\RuntimeException $e) {
+            return ['errors' => [$e->getMessage()]] + $base;
+        }
+        $profile = CsvProfiles::detect($csv['headers']);
+        if ($profile !== null) {
+            $applied = CsvProfiles::apply($profile, $csv['rows']);
+            $errors = $applied['errors'];
+            $source = CsvProfiles::source($profile);
+            $period ??= CsvProfiles::periodFromFileName($fileName);
+            if ($profile === 'amazon_overview') {
+                if ($period === null) {
+                    $errors[] = 'Der Amazon-Export hat keinen Zeitraum in den Daten. Bitte den Zeitraum angeben (steht im Dateinamen).';
+                } else {
+                    $errors = [...$errors, ...$this->checkPeriod($period)];
+                }
+            } else {
+                $period = null; // daily rows and per-episode totals carry no period
+            }
+            if ($applied['rows'] === [] && $applied['followers'] === null) {
+                $errors[] = $profile === 'spotify_trends_first7' ? 'In der Trends-Datei hat noch keine Folge einen Wert.' : 'Die CSV enthält keine Datenzeilen.';
+            }
+            return [
+                'errors' => $errors, 'source' => $source, 'kind' => 'metrics', 'period' => $period, 'profile' => $profile,
+                'followers' => $applied['followers'], 'episodes' => $applied['rows'],
+            ] + $base;
+        }
         $mapping = json_decode($this->db->setting('spotify.mapping') ?? 'null', true);
         if (!is_array($mapping)) {
             return ['errors' => ['Für Spotify-CSVs ist noch keine Spalten-Zuordnung gespeichert. Bitte zuerst unter Automatik › Import festlegen.']] + $base;
         }
         try {
-            $csv = SpotifyCsv::read($content);
             $rows = SpotifyCsv::apply($csv['headers'], $csv['rows'], $mapping);
         } catch (\RuntimeException $e) {
             return ['errors' => [$e->getMessage()]] + $base;

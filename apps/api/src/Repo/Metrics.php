@@ -114,6 +114,20 @@ final class Metrics
         );
     }
 
+    /** False when a platform only delivers show level values (e.g. the Spotify "Leistung" export): per episode it is "–", not 0. */
+    public function hasEpisodeLevel(string $platform): bool
+    {
+        if ($platform === 'downloads') {
+            return true;
+        }
+        if ($platform === 'website') {
+            return false;
+        }
+        $metric = self::LEAD[$platform];
+        return $this->cache["e:{$platform}"] ??= $this->db->value('SELECT 1 FROM metric_daily WHERE platform = ? AND metric = ? AND episode_id <> 0 LIMIT 1', [$platform, $metric]) !== null
+            || $this->db->value('SELECT 1 FROM metric_period WHERE platform = ? AND metric = ? AND episode_id <> 0 LIMIT 1', [$platform, $metric]) !== null;
+    }
+
     /** @return array<int, float> */
     private function pairs(string $sql, array $params): array
     {
@@ -198,7 +212,11 @@ final class Metrics
             $end = Clock::addDays($publishedDate, $days - 1);
             $out[$key] = [];
             foreach (self::IN_REACH as $platform) {
-                $series = $this->dailySeries($platform, $publishedDate, $end, $episodeId);
+                if ($platform === 'spotify' && $days === 7) {
+                    $out[$key][$platform] = $this->spotifyFirst7($episodeId, $end);
+                    continue;
+                }
+                $series = $platform === 'spotify' && !$this->hasEpisodeLevel('spotify') ? null : $this->dailySeries($platform, $publishedDate, $end, $episodeId);
                 if ($series === null || ($series['__max'] ?? '') < $end) {
                     $out[$key][$platform] = null;
                     continue;
@@ -208,6 +226,16 @@ final class Metrics
             }
         }
         return $out;
+    }
+
+    /** Spotify's own "plays in the first 7 days", valid once it was captured after day 7. */
+    private function spotifyFirst7(int $episodeId, string $day7): ?float
+    {
+        $row = $this->db->one(
+            "SELECT value, captured_at FROM metric_totals WHERE platform = 'spotify' AND metric = 'plays_first7d' AND episode_id = ? ORDER BY captured_at DESC LIMIT 1",
+            [$episodeId],
+        );
+        return $row !== null && Clock::dateOf((string) $row['captured_at']) > $day7 ? (float) $row['value'] : null;
     }
 
     // ---------------------------------------------------------------- reach

@@ -256,7 +256,7 @@ final class App
         }
         $available = [];
         foreach (Metrics::ALL as $platform) {
-            $available[$platform] = $metrics->platformValue($platform, $range['from'], $range['to']) !== null;
+            $available[$platform] = $metrics->hasEpisodeLevel($platform) && $metrics->platformValue($platform, $range['from'], $range['to']) !== null;
         }
         $rows = [];
         foreach ($db->all('SELECT * FROM episodes ORDER BY published_at DESC') as $e) {
@@ -284,7 +284,7 @@ final class App
             'number' => $number,
             'title' => $e['title'],
             'publishedAt' => $e['published_at'],
-            'thumbnail' => $number === null ? null : sprintf('https://monteur-podcast.de/media/img/folgen/folge-%02d.jpg', $number),
+            'thumbnail' => $e['thumbnail_url'] ?? null,
             'youtubeVideoId' => $e['youtube_video_id'],
         ];
     }
@@ -299,10 +299,13 @@ final class App
         $metrics = new Metrics($db);
         $published = Clock::dateOf((string) $e['published_at']);
         $to = Clock::today();
+        // Totals since publication: an episode has no values before it is out, so the whole history is
+        // used. That way routine periods that start a few days before the release still count.
+        $since = '2000-01-01';
         $values = [];
         foreach (Metrics::ALL as $platform) {
-            $all = $metrics->byEpisode($platform, $published, $to);
-            $values[$platform] = $metrics->platformValue($platform, $published, $to) === null ? null : ($all[$id] ?? 0.0);
+            $all = $metrics->byEpisode($platform, $since, $to);
+            $values[$platform] = !$metrics->hasEpisodeLevel($platform) || $metrics->platformValue($platform, $since, $to) === null ? null : ($all[$id] ?? 0.0);
         }
         $reachParts = array_filter(array_intersect_key($values, array_flip(Metrics::IN_REACH)), static fn ($v): bool => $v !== null);
         $daily = [];
@@ -479,6 +482,7 @@ final class App
             'content' => (string) ($body['content'] ?? ''),
             'source' => isset($body['source']) ? (string) $body['source'] : null,
             'period' => is_array($period) ? ['from' => (string) ($period['from'] ?? ''), 'to' => (string) ($period['to'] ?? '')] : null,
+            'fileName' => isset($body['fileName']) ? basename((string) $body['fileName']) : null,
         ];
     }
 
@@ -489,7 +493,13 @@ final class App
         } catch (\RuntimeException $e) {
             throw new HttpException(422, $e->getMessage());
         }
-        return ['headers' => $csv['headers'], 'sample' => array_slice($csv['rows'], 0, 3)];
+        $profile = \Cockpit\Import\CsvProfiles::detect($csv['headers']);
+        return [
+            'headers' => $csv['headers'],
+            'sample' => array_slice($csv['rows'], 0, 3),
+            'profile' => $profile,
+            'profileLabel' => $profile === null ? null : \Cockpit\Import\CsvProfiles::LABELS[$profile],
+        ];
     }
 
     private function saveSpotifyMapping(array $body): array

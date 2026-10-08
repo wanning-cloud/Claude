@@ -40,6 +40,13 @@ final class ConnectorsTest extends TestCase
         self::assertNull(FeedConnector::duration(''));
     }
 
+    public function testPostersFromFolgenJs(): void
+    {
+        $js = "/* Erzeugt vom Upload-Helfer. */\nwindow.MP_FOLGEN = {\"episodes\":[{\"nr\":1,\"poster\":\"media/img/folgen/folge-01-v1.jpg\"},{\"nr\":2,\"poster\":\"../x.jpg\"}]};";
+        self::assertSame([1 => 'https://monteur-podcast.de/media/img/folgen/folge-01-v1.jpg'], FeedConnector::parsePosters($js, 'https://monteur-podcast.de/'));
+        self::assertSame([], FeedConnector::parsePosters('garbage', 'https://monteur-podcast.de/'));
+    }
+
     public function testFeedSyncIsRepeatable(): void
     {
         $db = Support::db();

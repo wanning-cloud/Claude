@@ -1,0 +1,7 @@
+node_modules
+dist
+apps/api
+*.md
+package-lock.json
+playwright-report
+test-results
