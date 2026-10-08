@@ -1,0 +1,22 @@
+--- orig/index.php	2026-10-08 18:05:58.716018964 +0000
++++ index.php	2026-10-08 18:05:58.753737727 +0000
+@@ -224,7 +224,7 @@
+ </head>
+ <body>
+ <header><div class="wrap"><b>Monteur-Podcast · Upload-Helfer</b>
+-<?php if ($logged): ?><a href="newsletter.php" style="color:#f2f6fa;margin-left:auto;margin-right:16px">Newsletter</a><form method="post" class="inline"><?= hidden('logout') ?><button type="submit" id="logout">Abmelden</button></form><?php endif; ?>
++<?php if ($logged): ?><a href="analytics/" style="color:#f2f6fa;margin-left:auto;margin-right:16px">Analytics</a><a href="newsletter.php" style="color:#f2f6fa;margin-right:16px">Newsletter</a><form method="post" class="inline"><?= hidden('logout') ?><button type="submit" id="logout">Abmelden</button></form><?php endif; ?>
+ </div></header>
+ <main class="wrap">
+ 
+--- orig/newsletter.php	2026-10-08 18:05:58.716050673 +0000
++++ newsletter.php	2026-10-08 18:05:58.753991752 +0000
+@@ -230,7 +230,7 @@
+ </head>
+ <body>
+ <header><div class="wrap"><b>Monteur-Podcast · Newsletter</b>
+-<a href="index.php">Zum Upload-Helfer</a>
++<span><a href="analytics/" style="margin-right:16px">Analytics</a><a href="index.php">Zum Upload-Helfer</a></span>
+ </div></header>
+ <main class="wrap">
+ 
