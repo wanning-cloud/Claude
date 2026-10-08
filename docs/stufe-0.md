@@ -20,11 +20,21 @@ Stand 07.10.2026. Grundlage: `MASTER-PROMPT.md` (Fassung 2026-10-07_08-57).
 - **Apple**: kein Export in Podcasts Connect, Werte zurzeit „nicht genügend Daten“. Die Routine liest ab Stufe 2 ab.
 - **Freigabe für Stufe 1**: erteilt am 08.10.2026 („do it“). Stufe 1 ist gebaut, siehe README. Live geht sie erst mit „Veröffentliche das Cockpit“.
 
+## Entscheidungen vom 08.10.2026 (zweite Runde)
+
+| Frage | Entscheidung |
+| --- | --- |
+| Menüpunkt „Analytics“ im podcast-admin | Ja. Wird beim ersten Veröffentlichen eingebaut (vorher Sicherung). |
+| Wochen-Routine | Montag 08:20 auf dem Mac. |
+| Download-Messung | **Variante A, endgültig**: all-inkl-Logs unter `/logs/access_log_monteur-podcast_de_JJJJ-MM-TT.gz`, ein `.gz` pro Tag, Log-Stufe „vollständig“, 190 Tage. Kein OP3. |
+| PHP-Version | 8.5 |
+
+Folgen für den Code: Log-Dateien werden nach dem Datum im Namen gelesen, der Rückstand von bis zu 190 Tagen wird in Etappen nachgeholt (Zeitbudget je Cron-Lauf), „Stand“ der Downloads ist die neueste gelesene Log-Zeile (heutige Downloads erscheinen am Folgetag). `ACCESS_LOG_DIR=logs` reicht, der Ordner wird vom Code aus nach oben gesucht.
+
 ## Noch offen
 
 - **Frage 4, YouTube:** Google-Cloud-Projekt anlegen, beide APIs aktivieren, OAuth-Client einrichten, Zustimmungsbildschirm auf „In Produktion“ stellen. Ich führe Schritt für Schritt durch, sobald Stufe 1 so weit ist. Bei Variante 2 lautet die Redirect-URI `https://monteur-podcast.de/podcast-admin/analytics/api/youtube/callback`.
-- **Frage 5, Wochen-Routine:** Montag 08:20 auf dem Mac (wach, Chrome mit Claude-Erweiterung, angemeldet bei Spotify, Apple, Amazon und im podcast-admin)?
-- **Zugriffs-Logs:** Log-Stufe und Ablageort im KAS prüfen (entscheidet Variante A oder B der Download-Messung).
+- **Log-Stufe (Datenschutz):** „vollständig“ heißt, all-inkl speichert volle IP-Adressen 190 Tage. Das Cockpit speichert keine IPs; die Zählung funktioniert auch mit „teilanonymisiert“. Entscheidung bei Markus, siehe `docs/datenschutz-vorschlag.md`.
 
 ## Was Variante 2 am Master-Prompt ändert
 

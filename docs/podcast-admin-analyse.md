@@ -30,7 +30,7 @@ Das Cockpit liest diese Sitzung nur (`session_start(['read_and_close' => true])`
 
 Es gibt kein Menü-Array. Die Kopfzeile steht direkt in `index.php` (Zeile 227) und `newsletter.php` (Zeile 232–233).
 
-**Änderungsvorschlag (wird erst nach Freigabe mit der Routine „Cockpit veröffentlichen“ eingebaut, vorher Sicherung):**
+**Änderung (von Markus am 08.10.2026 freigegeben; wird beim ersten Veröffentlichen mit der Routine „Cockpit veröffentlichen“ eingebaut, vorher Sicherung):**
 
 `index.php`, Zeile 227, vor dem Link „Newsletter“:
 
@@ -56,5 +56,4 @@ Es gibt kein Menü-Array. Die Kopfzeile steht direkt in `index.php` (Zeile 227) 
 
 ## Noch offen
 
-- **Zugriffs-Logs:** Im Export sind keine Logs enthalten. Bitte im KAS prüfen: Unter „Statistiken/Logs“ die Log-Stufe (mindestens „teilanonymisiert“) und ob die Rohdaten als Datei im FTP liegen (oft `/logs/`). Pfad dann als `ACCESS_LOG_DIR` eintragen. Sind sie nicht abrufbar, nutzen wir OP3 (Variante B).
-- **PHP-Version** der Domain im KAS.
+- Erledigt: Logs liegen unter `/logs/access_log_monteur-podcast_de_JJJJ-MM-TT.gz` (Log-Stufe „vollständig“, 190 Tage), PHP ist 8.5 (Angaben von Markus, 08.10.2026).

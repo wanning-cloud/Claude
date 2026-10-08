@@ -17,14 +17,14 @@ Live geht nur etwas über diese Routine und nur nach Markus' ausdrücklichem Ja 
 
 Alles in Markus' Chrome (WebFTP und KAS von all-inkl), Freigabe für jeden Schritt einzeln:
 
-1. **PHP-Version** der Domain im KAS prüfen: mindestens 8.2.
+1. **PHP-Version**: laut Markus 8.5 (mindestens 8.2 nötig). Nach dem ersten Aufruf das PHP-Fehlerprotokoll im KAS auf Hinweise (deprecated) ansehen.
 2. **Einstellungsdatei außerhalb des Web-Ordners** anlegen, z. B. `/analytics-private/analytics.env` neben dem Domain-Ordner (Werte siehe `apps/api/analytics.env.example`, Geheimnisse erzeugt Markus oder gibt sie selbst ein). Darin `DATABASE_PATH` und `BACKUP_DIR` ebenfalls außerhalb des Web-Ordners. Nie Zugangsdaten in den Chat, in Notizen oder ins Repo.
 3. Nach dem ersten Upload `podcast-admin/analytics/api/app/env-path.txt` mit dem absoluten Pfad zu dieser Datei anlegen (der Ordner `app/` ist per `.htaccess` gesperrt).
 4. **Cronjob** im KAS unter „Tools › Cronjobs“: alle 30 Minuten
    `https://monteur-podcast.de/podcast-admin/analytics/api/cron?job=due&key=<CRON_KEY>`
    Den Schlüssel trägt Markus selbst ein.
-5. **Zugriffs-Logs** prüfen (Variante A der Download-Messung): Log-Stufe mindestens „teilanonymisiert“, Ordner der Rohlogs als `ACCESS_LOG_DIR` eintragen. Gibt es keine Rohlogs: Markus fragen, ob OP3 (Variante B) eingerichtet werden soll.
-6. **podcast-admin ergänzen** (siehe `docs/podcast-admin-analyse.md`): vorher `index.php` und `newsletter.php` als `*.bak-<datum>` sichern, dann nur den Menülink „Analytics“ einfügen. Sonst nichts am podcast-admin ändern.
+5. **Zugriffs-Logs** (Variante A, entschieden): `ACCESS_LOG_DIR=logs` und `ACCESS_LOG_GLOB=access_log_monteur-podcast_de_*.gz`. Die Dateien liegen unter `/logs/` im FTP-Hauptordner, eine pro Tag, 190 Tage. Danach unter Automatik › Downloads „Jetzt holen“: Der erste Lauf holt den Rückstand in Etappen nach („Noch … Log-Dateien offen“), der Cron macht von allein weiter.
+6. **podcast-admin ergänzen** (von Markus am 08.10.2026 freigegeben, siehe `docs/podcast-admin-analyse.md`): vorher `index.php` und `newsletter.php` als `*.bak-<datum>` im Ordner `podcast-admin/backup/` sichern, dann nur den Menülink „Analytics“ einfügen (in `index.php` vor „Newsletter“, in `newsletter.php` nach „Zum Upload-Helfer“). Sonst nichts am podcast-admin ändern. Danach prüfen: Upload-Helfer und Newsletter laufen unverändert, der Link führt ins Cockpit.
 
 ## Hochladen
 

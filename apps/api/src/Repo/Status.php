@@ -34,7 +34,7 @@ final class Status
     {
         return match ($platform) {
             'youtube' => $this->serverStamp('youtube_stats', 'API', 'YouTube ist noch nicht verbunden.'),
-            'downloads' => $this->serverStamp('downloads', 'Server', 'Die Download-Messung läuft noch nicht. Erst Zugriffs-Logs prüfen (Stufe 0).'),
+            'downloads' => $this->downloadsStamp(),
             'website' => ['at' => null, 'via' => null, 'missing' => 'Der Website-Player wird in Stufe 2 angebunden.'],
             default => $this->routineStamp($platform),
         };
@@ -50,6 +50,24 @@ final class Status
         $stamp = ['at' => $at, 'via' => $via];
         if ($this->isStale($at)) {
             $stamp['missing'] = 'Zuletzt am ' . Clock::parse($at)->format('d.m.Y') . ' geholt.';
+        }
+        return $stamp;
+    }
+
+    /**
+     * "Stand" of the downloads is the newest log line read, not the time of the run: all-inkl writes the
+     * access log once per day, so today's downloads arrive tomorrow.
+     * @return array{at: string|null, via: string|null, missing?: string}
+     */
+    private function downloadsStamp(): array
+    {
+        $stamp = $this->serverStamp('downloads', 'Server-Logs', 'Die Download-Messung läuft noch nicht. ACCESS_LOG_DIR in der analytics.env prüfen.');
+        $hwm = $this->db->setting('logs.hwm');
+        if ($stamp['at'] !== null && $hwm !== null) {
+            $stamp['at'] = Clock::iso(Clock::parse($hwm));
+            if (!isset($stamp['missing']) && Clock::dateOf($hwm) < Clock::today()) {
+                $stamp['missing'] = 'Heutige Downloads kommen morgen (all-inkl schreibt die Logs einmal am Tag).';
+            }
         }
         return $stamp;
     }

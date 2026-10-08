@@ -11,6 +11,10 @@ use Cockpit\Db;
 /**
  * Download measurement variant A: reads the all-inkl access logs incrementally (plain or .gz),
  * counts after IAB 2.2 and keeps no IP addresses. Progress per file lives in settings "logs.state".
+ *
+ * all-inkl writes one gzip file per day, e.g. /logs/access_log_monteur-podcast_de_2026-10-07.gz,
+ * kept for 190 days. Files are processed in the order of the date in their name. The first run has
+ * up to 190 days to catch up; each run stops after a time budget and the next run continues.
  */
 final class DownloadsLogsConnector implements Connector
 {
@@ -18,7 +22,8 @@ final class DownloadsLogsConnector implements Connector
         private readonly Db $db,
         private readonly IabCounter $counter,
         private readonly ?string $logDir,
-        private readonly string $glob = 'access*log*',
+        private readonly string $glob = 'access_log*',
+        private readonly int $budgetSeconds = 200,
     ) {
     }
 
@@ -41,7 +46,10 @@ final class DownloadsLogsConnector implements Connector
         if ($files === []) {
             throw new \RuntimeException('Im Log-Ordner liegen keine Zugriffs-Logs. Log-Stufe im KAS prüfen.');
         }
-        usort($files, static fn (string $a, string $b): int => filemtime($a) <=> filemtime($b) ?: strcmp($b, $a));
+        usort($files, static fn (string $a, string $b): int => self::sortKey($a) <=> self::sortKey($b));
+        $started = microtime(true);
+        $remaining = 0;
+        $read = 0;
         /** @var array<string, array{size: int, offset: int, mtime: int}> $state */
         $state = json_decode($this->db->setting('logs.state') ?? '{}', true) ?: [];
         // High-water mark: events older than the newest processed event are skipped, so a rotated
@@ -52,6 +60,11 @@ final class DownloadsLogsConnector implements Connector
         $unparsed = 0;
 
         foreach ($files as $file) {
+            // Every run reads at least one file, so a slow host still makes progress.
+            if ($read > 0 && microtime(true) - $started > $this->budgetSeconds) {
+                $remaining++;
+                continue;
+            }
             $gz = str_ends_with($file, '.gz');
             // Plain files are tracked by inode so a rotated file keeps its offset.
             $name = $gz ? basename($file) : 'ino:' . fileinode($file);
@@ -101,6 +114,7 @@ final class DownloadsLogsConnector implements Connector
                     }
                 }
                 $state[$name] = ['size' => $size, 'offset' => $gz ? $size : $offset, 'mtime' => $mtime];
+                $read++;
                 $this->db->setSetting('logs.state', (string) json_encode($state));
                 if ($newHwm !== null) {
                     $this->db->setSetting('logs.hwm', $newHwm);
@@ -113,11 +127,22 @@ final class DownloadsLogsConnector implements Connector
                 $gz ? gzclose($handle) : fclose($handle);
             }
         }
-        $this->counter->cleanup();
+        $this->counter->cleanup($newHwm);
         $message = "{$lines} Log-Zeilen gelesen, {$this->counter->counted} Downloads gezählt.";
+        if ($remaining > 0) {
+            $message .= " Noch {$remaining} Log-Dateien offen, geht beim nächsten Lauf weiter.";
+        }
         if ($unparsed > 0) {
             $message .= " {$unparsed} Zeilen im unbekannten Format übersprungen.";
         }
         return new SyncOutcome($this->counter->counted, $message);
+    }
+
+    /** Date in the file name (access_log_…_2026-10-07.gz) first, then modification time. */
+    private static function sortKey(string $file): string
+    {
+        $date = preg_match('/(\d{4}-\d{2}-\d{2})/', basename($file), $m) ? $m[1] : '9999-99-99';
+        // A plain file without date is the one being written right now: always last.
+        return $date . '|' . str_pad((string) filemtime($file), 12, '0', STR_PAD_LEFT) . '|' . basename($file);
     }
 }

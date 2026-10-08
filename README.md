@@ -62,7 +62,7 @@ Code: `apps/api/src/Counting/`, `apps/api/src/Repo/Metrics.php`, Tests: `apps/ap
 | YouTube-Kommentare | Server, YouTube Data API | alle 30 Minuten (einmal täglich vollständig) |
 | YouTube-Zahlen | Server, Data API + Analytics API | täglich 06:00 |
 | Apple-Bewertungen | Server, öffentlicher Bewertungs-Feed | täglich 06:10 |
-| Downloads | Server, all-inkl-Zugriffslogs | stündlich |
+| Downloads | Server, all-inkl-Zugriffslogs (`/logs/`, ein `.gz` pro Tag; heutige Downloads erscheinen am Folgetag) | stündlich geprüft |
 | Datenbank-Sicherung | Server, `VACUUM INTO`, 14 Tage | täglich 03:00 |
 | Spotify (ab Stufe 2: Apple, Amazon) | Claude-Routine „Podcast-Zahlen holen“ | Montag 08:20 und auf Zuruf |
 

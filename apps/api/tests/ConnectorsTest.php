@@ -101,6 +101,58 @@ final class ConnectorsTest extends TestCase
         rmdir($dir);
     }
 
+    public function testDailyAllInklLogsAreReadInDateOrderAcrossRuns(): void
+    {
+        $db = Support::db();
+        Support::seedEpisodes($db);
+        $dir = sys_get_temp_dir() . '/cockpit-logs-' . bin2hex(random_bytes(4));
+        mkdir($dir);
+        $ua = 'AppleCoreMedia/1.0.0.21E236 (iPhone; U; CPU OS 17_4 like Mac OS X; de_de)';
+        $write = static function (string $date, string ...$lines) use ($dir, &$mtime): void {
+            $file = "{$dir}/access_log_monteur-podcast_de_{$date}.gz";
+            $gz = gzopen($file, 'wb');
+            gzwrite($gz, implode("\n", $lines) . "\n");
+            gzclose($gz);
+            touch($file, $mtime--); // modification times run backwards on purpose
+        };
+        $mtime = time();
+        // Same listener late on day 1 and shortly after midnight: one download. Another listener on day 2.
+        $write('2026-10-01', Support::logLine('1.2.3.4', '01/Oct/2026:23:30:00 +0200', 'GET', '/media/folge-01.mp3', 200, 3_000_000, $ua));
+        $write('2026-10-02',
+            Support::logLine('1.2.3.4', '02/Oct/2026:00:20:00 +0200', 'GET', '/media/folge-01.mp3', 200, 3_000_000, $ua),
+            Support::logLine('5.6.7.8', '02/Oct/2026:09:00:00 +0200', 'GET', '/media/folge-01.mp3', 200, 3_000_000, $ua),
+        );
+        $write('2026-10-03', Support::logLine('9.9.9.9', '03/Oct/2026:10:00:00 +0200', 'GET', '/media/folge-02.mp3', 200, 3_000_000, $ua));
+
+        // Budget 0: each run reads exactly one file, then stops.
+        $run = static fn () => (new DownloadsLogsConnector($db, new IabCounter($db, new UserAgents()), $dir, 'access_log*', 0))->sync();
+        self::assertStringContainsString('Noch 2 Log-Dateien offen', $run()->message);
+        self::assertStringContainsString('Noch 1 Log-Dateien offen', $run()->message);
+        $run();
+        $run();
+        self::assertSame(3, (int) $db->value('SELECT SUM(downloads) FROM download_daily'));
+        self::assertSame(1, (int) $db->value("SELECT SUM(downloads) FROM download_daily WHERE date = '2026-10-01'"));
+        self::assertSame(1, (int) $db->value("SELECT SUM(downloads) FROM download_daily WHERE date = '2026-10-02'"));
+        self::assertSame(0, (int) $db->value('SELECT COUNT(*) FROM download_windows WHERE key_hash LIKE ?', ['%1.2.3.4%']));
+        $db->run("INSERT INTO sync_runs (source, trigger, started_at, finished_at, ok) VALUES ('downloads', 'test', ?, ?, 1)", [Clock::nowIso(), Clock::nowIso()]);
+        $stamp = (new \Cockpit\Repo\Status($db))->stamp('downloads');
+        self::assertSame('2026-10-03T10:00:00+02:00', $stamp['at'], 'Stand = newest log line, not the run time');
+        self::assertStringContainsString('kommen morgen', (string) ($stamp['missing'] ?? ''));
+        array_map('unlink', glob("{$dir}/*") ?: []);
+        rmdir($dir);
+    }
+
+    public function testRelativeLogDirIsFoundUpwards(): void
+    {
+        $root = sys_get_temp_dir() . '/cockpit-root-' . bin2hex(random_bytes(4));
+        mkdir("{$root}/logs", 0777, true);
+        mkdir("{$root}/htdocs/podcast-admin/analytics/api/app/src", 0777, true);
+        self::assertSame("{$root}/logs", \Cockpit\App::resolveLogDir('logs', "{$root}/htdocs/podcast-admin/analytics/api/app/src"));
+        self::assertNull(\Cockpit\App::resolveLogDir('gibt-es-nicht', "{$root}/htdocs"));
+        self::assertSame("{$root}/logs", \Cockpit\App::resolveLogDir("{$root}/logs", '/'));
+        exec('rm -rf ' . escapeshellarg($root));
+    }
+
     public function testScheduleRules(): void
     {
         $now = Clock::now(); // 12:00

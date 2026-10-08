@@ -35,6 +35,8 @@ final class App
     private ?AdminSession $session = null;
     private ?SyncRunner $runner = null;
     private ?YouTubeAuth $youtubeAuth = null;
+    /** Seconds one run may spend on catching up access logs: cron 200, a button click in the browser 40. */
+    private int $logBudget = 200;
 
     public function __construct(
         private readonly Config $config,
@@ -92,7 +94,13 @@ final class App
             $add(new AppleReviewsConnector($db, $this->http, $this->config->get('APPLE_PODCAST_ID', '6819469570'), $storefronts));
             if ($this->config->get('ACCESS_LOG_DIR') !== null) {
                 $counter = new IabCounter($db, new UserAgents(dirname(__DIR__) . '/data'));
-                $add(new DownloadsLogsConnector($db, $counter, $this->config->get('ACCESS_LOG_DIR'), $this->config->get('ACCESS_LOG_GLOB', 'access*log*')));
+                $add(new DownloadsLogsConnector(
+                    $db,
+                    $counter,
+                    self::resolveLogDir((string) $this->config->get('ACCESS_LOG_DIR'), __DIR__),
+                    $this->config->get('ACCESS_LOG_GLOB', 'access_log*'),
+                    $this->logBudget,
+                ));
             }
             $add(new BackupJob($db, $this->config->get('BACKUP_DIR', dirname($this->config->get('DATABASE_PATH', dirname(__DIR__) . '/data/cockpit.sqlite')) . '/backups')));
             $this->runner = new SyncRunner($db, $connectors);
@@ -165,6 +173,25 @@ final class App
         $r->add('POST', '/youtube/disconnect', fn (): Response => Response::json($this->youtubeDisconnect()));
         $r->add('GET', '/cron', fn (Request $q): Response => Response::json($this->cron($q)));
         return $r;
+    }
+
+    /**
+     * ACCESS_LOG_DIR may be absolute or relative to the FTP root of the account (all-inkl: "logs").
+     * A relative path is searched upwards from the code directory, so nobody has to know the absolute
+     * server path. Returns null when nothing is found; the connector then reports it in plain language.
+     */
+    public static function resolveLogDir(string $configured, string $from): ?string
+    {
+        if (str_starts_with($configured, '/')) {
+            return is_dir($configured) ? $configured : null;
+        }
+        $relative = trim($configured, '/');
+        for ($dir = $from; $dir !== dirname($dir); $dir = dirname($dir)) {
+            if (@is_dir($dir . '/' . $relative)) {
+                return $dir . '/' . $relative;
+            }
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------- ranges
@@ -442,6 +469,7 @@ final class App
 
     private function syncNow(string $source): array
     {
+        $this->logBudget = 40;
         if (!isset($this->runner()->connectors()[$source]) || $source === 'backup') {
             throw new HttpException(404, 'Diese Quelle lässt sich nicht von Hand starten oder ist nicht eingerichtet.');
         }

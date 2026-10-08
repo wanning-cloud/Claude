@@ -169,10 +169,13 @@ final class Metrics
                 $episodeId !== null ? [$from, $to, $episodeId] : [$from, $to],
             );
             $spotifyDays = array_flip($this->spotifyDays($from, $to));
-            // Logs are read up to the last successful run: that day counts as "data present".
+            // Data reaches the day of the newest log line read (all-inkl writes one file per day, so today
+            // is usually not in yet). Without that mark, the day of the last successful run counts.
+            $hwm = $this->db->setting('logs.hwm');
             $lastRun = $this->db->value("SELECT MAX(started_at) FROM sync_runs WHERE source = 'downloads' AND ok = 1");
-            $lastDate = $this->db->value('SELECT MAX(date) FROM download_daily');
-            $out = ['__max' => max($lastRun === null ? '' : Clock::dateOf((string) $lastRun), (string) $lastDate)];
+            $lastDate = (string) $this->db->value('SELECT MAX(date) FROM download_daily');
+            $through = $hwm !== null ? Clock::dateOf($hwm) : max($lastRun === null ? '' : Clock::dateOf((string) $lastRun), $lastDate);
+            $out = ['__max' => $through];
             foreach ($rows as $row) {
                 if ($row['app'] === self::SPOTIFY_APP && isset($spotifyDays[$row['date']])) {
                     continue;

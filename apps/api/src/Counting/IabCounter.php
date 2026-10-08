@@ -118,12 +118,18 @@ final class IabCounter
         return hash_hmac('sha256', $material, $this->salts[$day]);
     }
 
-    /** Removes windows older than 48 hours and salts older than two days (relative to now). */
-    public function cleanup(): void
+    /**
+     * Removes windows older than 48 hours and salts older than two days. The reference is the newest
+     * processed log event (or now): while old logs are being caught up, windows at the edge of a run
+     * must survive until the next run continues with the following day.
+     */
+    public function cleanup(?string $referenceUtc = null): void
     {
-        $cutoff = Clock::now()->setTimezone(new \DateTimeZone('UTC'))->modify('-48 hours')->format('Y-m-d\TH:i:s\Z');
+        $reference = $referenceUtc !== null ? new \DateTimeImmutable($referenceUtc) : Clock::now();
+        $reference = min($reference, Clock::now());
+        $cutoff = $reference->setTimezone(new \DateTimeZone('UTC'))->modify('-48 hours')->format('Y-m-d\TH:i:s\Z');
         $this->db->run('DELETE FROM download_windows WHERE window_start < ?', [$cutoff]);
-        $this->db->run('DELETE FROM daily_salts WHERE day < ?', [Clock::addDays(Clock::today(), -2)]);
+        $this->db->run('DELETE FROM daily_salts WHERE day < ?', [Clock::addDays($reference->setTimezone(Clock::tz())->format('Y-m-d'), -2)]);
         $this->salts = [];
     }
 }
