@@ -13,9 +13,10 @@
     "schema": "npm run schema -w packages/shared",
     "lint": "eslint . && prettier --check . && tsc -b && php apps/api/bin/lint.php",
     "format": "prettier --write .",
-    "test": "npm run schema && vitest run && composer --working-dir=apps/api test",
+    "test": "npm run schema && vitest run && php apps/api/vendor/bin/phpunit -c apps/api/phpunit.xml --colors=never",
     "test:e2e": "playwright test",
-    "secrets": "gitleaks detect --no-banner"
+    "secrets": "node scripts/check-secrets.mjs",
+    "release": "./scripts/build-release.sh"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

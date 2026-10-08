@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { api, setCsrf } from '../api.ts';
 import { useRangeSuffix } from '../range.ts';
-import { ErrorBox, PageLoading } from './States.tsx';
+import { ErrorBox } from './States.tsx';
 
 const NAV = [
   { to: '/', label: 'Übersicht', short: 'Übersicht', end: true, mobile: true },
@@ -121,7 +121,8 @@ export function Layout() {
       </header>
 
       <main id="inhalt" ref={mainRef} tabIndex={-1} className="mx-auto max-w-[1240px] px-4 py-6 outline-none md:px-8 md:py-10">
-        {session.isPending ? <PageLoading /> : session.isError ? <ErrorBox error={session.error} onRetry={() => session.refetch()} /> : <Outlet />}
+        {/* Pages load in parallel with the session; a missing login redirects from the API client. */}
+        {session.isError ? <ErrorBox error={session.error} onRetry={() => session.refetch()} /> : <Outlet />}
       </main>
 
       <nav aria-label="Navigation" className="fixed inset-x-0 bottom-0 z-40 border-t-4 border-ink bg-white md:hidden">

@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 // CLI entry for the scheduler: php bin/cron.php [due|feed|youtube_comments|...]
-require __DIR__ . '/../src/autoload.php';
+// In the repo this file is bin/cron.php, on the server app/cron-cli.php next to src/.
+require (is_dir(__DIR__ . '/src') ? __DIR__ : dirname(__DIR__)) . '/src/autoload.php';
 
 date_default_timezone_set('Europe/Berlin');
 $app = new Cockpit\App(Cockpit\Config::load());

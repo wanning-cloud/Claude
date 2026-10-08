@@ -32,11 +32,16 @@ export class ApiError extends Error {
 }
 
 let csrf = '';
+let resolveCsrf: () => void = () => {};
+// Writes wait until the session (and its CSRF token) is loaded; reads start right away.
+const csrfReady = new Promise<void>((resolve) => (resolveCsrf = resolve));
 export function setCsrf(token: string) {
   csrf = token;
+  resolveCsrf();
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (method !== 'GET') await csrfReady;
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
