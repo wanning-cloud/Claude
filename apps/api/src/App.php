@@ -730,8 +730,9 @@ final class App
         $back = rtrim($this->config->get('PUBLIC_ORIGIN', ''), '/') . '/podcast-admin/analytics/automatik';
         $stored = explode('|', (string) $this->db()->setting('oauth.meta_state'));
         $this->db()->run("DELETE FROM settings WHERE key = 'oauth.meta_state'");
+        // 30 minutes: the Meta dialog with page and business selection takes longer than Google's.
         $valid = count($stored) === 2 && hash_equals($stored[0], (string) $request->q('state'))
-            && Clock::parse($stored[1]) > Clock::now()->modify('-15 minutes');
+            && Clock::parse($stored[1]) > Clock::now()->modify('-30 minutes');
         if (!$valid) {
             return Response::redirect($back . '?meta=fehler&grund=' . rawurlencode('Anmeldung abgelaufen. Bitte noch einmal „Meta verbinden“ klicken.'));
         }

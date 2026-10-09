@@ -51,11 +51,17 @@ final class SocialTest extends TestCase
 
     private function config(): Config
     {
-        return Config::fromArray([
+        return Config::fromArray($this->configValues());
+    }
+
+    /** @return array<string, string> */
+    private function configValues(): array
+    {
+        return [
             'APP_ENV' => 'test', 'DEV_AUTH_USER' => 'markus', 'ADMIN_TOKEN_SECRET' => 'test-secret', 'ENCRYPTION_KEY' => base64_encode(str_repeat('k', 32)),
             'GOOGLE_CLIENT_ID' => 'id', 'GOOGLE_CLIENT_SECRET' => 'secret', 'GOOGLE_REDIRECT_URI' => 'https://example.test/cb',
             'META_APP_ID' => 'app', 'META_APP_SECRET' => 'app-secret', 'META_REDIRECT_URI' => 'https://monteur-podcast.de/podcast-admin/analytics/api/meta/callback',
-        ]);
+        ];
     }
 
     private function connectMeta(bool $instagram = true): MetaAuth
@@ -285,6 +291,32 @@ final class SocialTest extends TestCase
         self::assertSame('2', $page['id']);
         $this->expectExceptionMessage('META_PAGE_ID');
         MetaAuth::pickPage([['id' => '1', 'name' => 'A'], ['id' => '2', 'name' => 'B']], null);
+    }
+
+    public function testMetaConnectFindsABusinessPortfolioPageMissingFromAccounts(): void
+    {
+        $this->http->routes = [
+            'GET ' . self::GRAPH . 'oauth/access_token' => ['status' => 200, 'body' => '{"access_token":"user-token"}'],
+            'GET ' . self::GRAPH . 'me/accounts' => ['status' => 200, 'body' => json_encode(['data' => [
+                ['id' => '1', 'name' => 'Page A', 'access_token' => 'a'], ['id' => '2', 'name' => 'Page B', 'access_token' => 'b'],
+            ]])],
+            'GET ' . self::GRAPH . '900?' => ['status' => 200, 'body' => json_encode([
+                'id' => '900', 'name' => 'Der Monteur Podcast', 'access_token' => 'portfolio-page-token',
+                'instagram_business_account' => ['id' => 'ig9', 'username' => 'dermonteurpodcast'],
+            ])],
+        ];
+        $crypto = new Crypto(base64_encode(str_repeat('k', 32)));
+        $config = Config::fromArray($this->configValues() + ['META_PAGE_ID' => '900']);
+        $auth = new MetaAuth($this->db, $this->http, $config, $crypto);
+        $result = $auth->connect('code');
+        self::assertSame(['page' => 'Der Monteur Podcast', 'instagram' => 'dermonteurpodcast'], $result);
+        self::assertSame('900', $auth->pageId());
+        self::assertSame('portfolio-page-token', $auth->pageToken());
+
+        // Without a page token for that id the clear error stays.
+        $this->http->routes['GET ' . self::GRAPH . '900?'] = ['status' => 200, 'body' => '{"id":"900","name":"Der Monteur Podcast"}'];
+        $this->expectExceptionMessage('Business-Portfolio');
+        $auth->connect('code');
     }
 
     public function testUtmVisitsAreCountedForSocialOnly(): void

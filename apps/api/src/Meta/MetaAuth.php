@@ -78,8 +78,18 @@ final class MetaAuth
             'client_secret' => $this->config->require('META_APP_SECRET'),
             'fb_exchange_token' => $short,
         ]);
-        $pages = $this->userGet('me/accounts', $long, ['fields' => 'id,name,access_token,instagram_business_account{id,username}', 'limit' => 100]);
-        $page = self::pickPage($pages['data'] ?? [], $this->config->get('META_PAGE_ID'));
+        $fields = 'id,name,access_token,instagram_business_account{id,username}';
+        $pages = $this->userGet('me/accounts', $long, ['fields' => $fields, 'limit' => 100])['data'] ?? [];
+        $pageId = $this->config->get('META_PAGE_ID');
+        if ($pageId !== null && !in_array($pageId, array_map(static fn (array $p): string => (string) $p['id'], $pages), true)) {
+            // Pages managed through a business portfolio are often missing from me/accounts. Meta documents
+            // GET /{page-id}?fields=access_token for any user with a task on the page, so ask for it directly.
+            $direct = $this->pageById($pageId, $long, $fields);
+            if ($direct !== null) {
+                $pages[] = $direct;
+            }
+        }
+        $page = self::pickPage($pages, $pageId);
         $instagram = $page['instagram_business_account'] ?? null;
         $this->db->tx(function () use ($page, $instagram): void {
             $now = Clock::nowIso();
@@ -118,7 +128,7 @@ final class MetaAuth
             }
         }
         if ($pageId !== null) {
-            throw new \RuntimeException('Die Seite aus META_PAGE_ID wurde nicht freigegeben. Beim Verbinden die Seite „Der Monteur Podcast“ auswählen.');
+            throw new \RuntimeException('Die Seite aus META_PAGE_ID wurde nicht freigegeben. Beim Verbinden die Seite „Der Monteur Podcast“ auswählen. Liegt sie in einem Business-Portfolio, braucht dein Profil dort vollen Zugriff auf die Seite.');
         }
         if (count($pages) === 1) {
             return $pages[0];
@@ -197,6 +207,17 @@ final class MetaAuth
             throw new \RuntimeException("Anmeldung bei Meta fehlgeschlagen (HTTP {$res['status']}" . ($raw !== '' ? ": {$raw}" : '') . ').');
         }
         return (string) $data['access_token'];
+    }
+
+    /** The page read directly with the user token, or null when Meta gives no page token for it. @return array<string, mixed>|null */
+    private function pageById(string $pageId, string $userToken, string $fields): ?array
+    {
+        try {
+            $page = $this->userGet(rawurlencode($pageId), $userToken, ['fields' => $fields]);
+        } catch (\RuntimeException) {
+            return null;
+        }
+        return isset($page['id'], $page['name']) && !empty($page['access_token']) ? $page : null;
     }
 
     /** @param array<string, string|int> $query @return array<string, mixed> */
