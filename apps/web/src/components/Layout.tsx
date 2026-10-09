@@ -9,6 +9,7 @@ const NAV = [
   { to: '/', label: 'Übersicht', short: 'Übersicht', end: true, mobile: true },
   { to: '/folgen', label: 'Folgen', short: 'Folgen', mobile: true },
   { to: '/portale', label: 'Portale', short: 'Portale', mobile: false },
+  { to: '/social', label: 'Social Media', short: 'Social', mobile: false },
   { to: '/kommentare', label: 'Kommentare', short: 'Postfach', mobile: true, counter: true },
   { to: '/automatik', label: 'Automatik', short: 'Automatik', mobile: true },
 ] as const;
@@ -108,6 +109,11 @@ export function Layout() {
               <li>
                 <NavLink to={'/portale' + suffix} className="label flex min-h-11 items-center text-white">
                   Portale
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to={'/social' + suffix} className="label flex min-h-11 items-center text-white">
+                  Social Media
                 </NavLink>
               </li>
               <li>

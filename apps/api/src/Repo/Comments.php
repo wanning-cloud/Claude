@@ -8,17 +8,22 @@ use Cockpit\Clock;
 use Cockpit\Db;
 use Cockpit\Google\YouTubeApi;
 use Cockpit\Http\HttpException;
+use Cockpit\Meta\MetaApi;
 
-/** Shared inbox for all platforms. Top level comments are the inbox items; replies hang below. */
+/**
+ * Shared inbox for all platforms. Top level comments are the inbox items; replies hang below.
+ * Area "social" = Instagram, Facebook and comments on YouTube Shorts; "podcast" = everything else.
+ */
 final class Comments
 {
     public const PAGE_SIZE = 50;
+    public const SOCIAL_SQL = "(c.platform IN ('instagram', 'facebook') OR (c.platform = 'youtube' AND c.video_id IN (SELECT external_id FROM social_posts WHERE platform = 'youtube_shorts')))";
 
     public function __construct(private readonly Db $db)
     {
     }
 
-    /** @param array{platform?: string|null, episode?: int|null, status?: string|null, page?: int} $filter */
+    /** @param array{platform?: string|null, area?: string|null, episode?: int|null, status?: string|null, page?: int} $filter */
     public function list(array $filter): array
     {
         $where = ['c.parent_id IS NULL', 'c.from_host = 0'];
@@ -26,6 +31,11 @@ final class Comments
         if (!empty($filter['platform'])) {
             $where[] = 'c.platform = ?';
             $params[] = $filter['platform'];
+        }
+        if (($filter['area'] ?? null) === 'social') {
+            $where[] = self::SOCIAL_SQL;
+        } elseif (($filter['area'] ?? null) === 'podcast') {
+            $where[] = 'NOT ' . self::SOCIAL_SQL;
         }
         if (!empty($filter['episode'])) {
             $where[] = 'c.episode_id = ?';
@@ -95,15 +105,25 @@ final class Comments
                 'error' => $q['error'],
             ];
         }
+        $posts = [];
+        $shorts = [];
+        foreach ($this->db->all('SELECT platform, external_id, permalink FROM social_posts') as $p) {
+            $posts[$p['platform'] . ':' . $p['external_id']] = $p['permalink'];
+            if ($p['platform'] === 'youtube_shorts') {
+                $shorts[(string) $p['external_id']] = true;
+            }
+        }
         $episodes = [];
         foreach ($this->db->all('SELECT id, number, title FROM episodes') as $e) {
             $episodes[(int) $e['id']] = ['id' => (int) $e['id'], 'number' => $e['number'] === null ? null : (int) $e['number'], 'title' => $e['title']];
         }
-        return array_map(function (array $r) use ($replies, $episodes): array {
+        return array_map(function (array $r) use ($replies, $episodes, $posts, $shorts): array {
             $platform = (string) $r['platform'];
             return [
                 'id' => (int) $r['id'],
                 'platform' => $platform,
+                'area' => in_array($platform, ['instagram', 'facebook'], true) || ($platform === 'youtube' && isset($shorts[(string) $r['video_id']])) ? 'social' : 'podcast',
+                'isShort' => $platform === 'youtube' && isset($shorts[(string) $r['video_id']]),
                 'episode' => $r['episode_id'] === null ? null : ($episodes[(int) $r['episode_id']] ?? null),
                 'author' => $r['author_name'],
                 'authorUrl' => $r['author_url'],
@@ -114,8 +134,12 @@ final class Comments
                 'status' => $r['status'],
                 'note' => $r['note'],
                 'replies' => $replies[(int) $r['id']] ?? [],
-                'replyMode' => match ($platform) { 'youtube' => 'api', 'spotify' => 'queue', default => 'none' },
-                'externalUrl' => $this->externalUrl($r),
+                'replyMode' => match ($platform) { 'youtube', 'instagram', 'facebook' => 'api', 'spotify' => 'queue', default => 'none' },
+                'externalUrl' => match ($platform) {
+                    'instagram', 'facebook' => $posts[$platform . ':' . $r['video_id']] ?? null,
+                    'youtube' => isset($shorts[(string) $r['video_id']]) ? 'https://www.youtube.com/shorts/' . rawurlencode((string) $r['video_id']) : $this->externalUrl($r),
+                    default => $this->externalUrl($r),
+                },
             ];
         }, $rows);
     }
@@ -149,8 +173,9 @@ final class Comments
      * Markus clicked "Antwort senden": that click is the approval for exactly this reply.
      * YouTube: stored as "sending", then comments.insert, then marked sent. On error the text is kept.
      * Spotify: queued for the next routine run.
+     * Instagram and Facebook: like YouTube, sent right away through the Graph API.
      */
-    public function reply(int $id, string $text, string $actor, ?YouTubeApi $youtube): array
+    public function reply(int $id, string $text, string $actor, ?YouTubeApi $youtube, ?MetaApi $meta = null): array
     {
         $comment = $this->db->one('SELECT * FROM comments WHERE id = ? AND parent_id IS NULL', [$id]);
         if ($comment === null) {
@@ -158,11 +183,11 @@ final class Comments
         }
         $text = trim($text);
         $platform = (string) $comment['platform'];
-        if (!in_array($platform, ['youtube', 'spotify'], true)) {
+        if (!in_array($platform, ['youtube', 'spotify', 'instagram', 'facebook'], true)) {
             throw new HttpException(422, $platform === 'apple' ? 'Antwort bei Apple nicht möglich.' : 'Auf diesem Portal kann das Cockpit nicht antworten.');
         }
         $now = Clock::nowIso();
-        $channel = $platform === 'youtube' ? 'api' : 'routine';
+        $channel = $platform === 'spotify' ? 'routine' : 'api';
         $this->db->run(
             'INSERT INTO reply_queue (comment_id, text, channel, state, approved_at) VALUES (?, ?, ?, ?, ?)',
             [$id, $text, $channel, $channel === 'api' ? 'sending' : 'queued', $now],
@@ -173,12 +198,17 @@ final class Comments
         if ($channel === 'routine') {
             return $this->get($id);
         }
-        if ($youtube === null) {
-            $this->failReply($replyId, 'YouTube ist nicht verbunden.');
-            throw new HttpException(409, 'YouTube ist nicht verbunden. Deine Antwort ist gespeichert und wurde nicht gesendet.');
+        $name = ['youtube' => 'YouTube', 'instagram' => 'Instagram', 'facebook' => 'Facebook'][$platform];
+        if (($platform === 'youtube' && $youtube === null) || ($platform !== 'youtube' && $meta === null)) {
+            $this->failReply($replyId, "{$name} ist nicht verbunden.");
+            throw new HttpException(409, "{$name} ist nicht verbunden. Deine Antwort ist gespeichert und wurde nicht gesendet.");
         }
         try {
-            $result = $youtube->post('comments', ['part' => 'snippet'], ['snippet' => ['parentId' => $comment['external_id'], 'textOriginal' => $text]]);
+            $result = match ($platform) {
+                'youtube' => $youtube->post('comments', ['part' => 'snippet'], ['snippet' => ['parentId' => $comment['external_id'], 'textOriginal' => $text]]),
+                'instagram' => $meta->post((string) $comment['external_id'] . '/replies', ['message' => $text]),
+                'facebook' => $meta->post((string) $comment['external_id'] . '/comments', ['message' => $text]),
+            };
         } catch (\Throwable $e) {
             $this->failReply($replyId, $e->getMessage());
             throw new HttpException(502, 'Antwort nicht gesendet: ' . $e->getMessage() . ' Dein Text ist gespeichert.');
@@ -189,8 +219,8 @@ final class Comments
             $this->db->run("UPDATE reply_queue SET state = 'sent', sent_at = ?, external_id = ?, error = NULL WHERE id = ?", [$at, $externalId, $replyId]);
             $this->db->run(
                 "INSERT OR IGNORE INTO comments (platform, external_id, parent_id, episode_id, video_id, author_name, text, posted_at, status, from_host)
-                 VALUES ('youtube', ?, ?, ?, ?, 'Markus Wanning', ?, ?, 'done', 1)",
-                [$externalId ?: 'reply:' . $replyId, $id, $comment['episode_id'], $comment['video_id'], $text, $at],
+                 VALUES (?, ?, ?, ?, ?, 'Markus Wanning', ?, ?, 'done', 1)",
+                [$comment['platform'], $externalId ?: 'reply:' . $replyId, $id, $comment['episode_id'], $comment['video_id'], $text, $at],
             );
             $this->db->run("UPDATE comments SET status = 'answered', answered_at = ? WHERE id = ?", [$at, $id]);
             $this->db->audit($actor, 'reply.sent', (string) $id, ['reply_id' => $replyId, 'external_id' => $externalId]);

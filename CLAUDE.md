@@ -31,3 +31,4 @@ npm run release      # baut release/analytics/ für den Upload
 - Import + echte Exportformate: `apps/api/src/Import/` (Schema-Quelle: `packages/shared/src/import.ts`, danach `npm run schema`)
 - Anmeldung: `apps/api/src/Auth/AdminSession.php` (Sitzung `mp_admin`, Schlüssel `ok`, nur lesen)
 - Oberfläche: `apps/web/src/pages/`, Tokens: `apps/web/src/styles.css`
+- Social Media (Instagram, Facebook-Seite, Shorts): `apps/api/src/Repo/Social.php`, `apps/api/src/Meta/`, Connectoren `Instagram*`, `Facebook*`, `MetaComments*`, Seite `apps/web/src/pages/Social.tsx`. Regel: Social-Werte nie in `metric_*`-Tabellen oder in die Reichweite; Shorts nie einer Folge zuordnen.

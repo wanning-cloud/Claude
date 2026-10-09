@@ -2,4 +2,5 @@
 export * from './platforms.ts';
 export * from './api.ts';
 export * from './format.ts';
+export * from './social.ts';
 export type { ImportPayload } from './import.ts';

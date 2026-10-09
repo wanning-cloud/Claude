@@ -13,6 +13,7 @@ const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail.tsx'));
 const Platform = lazy(() => import('./pages/Platform.tsx'));
 const Comments = lazy(() => import('./pages/Comments.tsx'));
 const Automation = lazy(() => import('./pages/Automation.tsx'));
+const Social = lazy(() => import('./pages/Social.tsx'));
 const NotFound = lazy(() => import('./pages/NotFound.tsx'));
 
 const queryClient = new QueryClient({
@@ -37,6 +38,7 @@ const router = createBrowserRouter(
         { path: 'folgen/:id', element: page(<EpisodeDetail />) },
         { path: 'portale', element: <Navigate to="/portale/youtube" replace /> },
         { path: 'portale/:platform', element: page(<Platform />) },
+        { path: 'social', element: page(<Social />) },
         { path: 'kommentare', element: page(<Comments />) },
         { path: 'kommentare/:id', element: page(<Comments />) },
         { path: 'automatik', element: page(<Automation />) },

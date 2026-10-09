@@ -42,8 +42,9 @@ Series in blue, pink, ink and hatched ink; labels directly at bar or line end; m
 
 ## Layout
 
-- Desktop: top bar (logo text, Übersicht · Folgen · Portale · Kommentare + count · Automatik, back link to podcast-admin).
-- Phone: bottom bar with four items (Übersicht, Folgen, Kommentare, Automatik); Portale in the menu.
+- Desktop: top bar (logo text, Übersicht · Folgen · Portale · Social Media · Kommentare + count · Automatik, back link to podcast-admin).
+- Phone: bottom bar with four items (Übersicht, Folgen, Kommentare, Automatik); Portale and Social Media in the menu.
+- Social Media page: channel switch (Alle · Instagram · Facebook · Shorts) in the style of the portal tabs; one card per channel with the follower block in blue; goals as bordered progress bars; clips per week as bars with a dashed target line and the count printed on each bar.
 - Content max width 1240 px, 16 px gutter on phones, 32 px from 768 px.
 
 ## Motion

@@ -43,6 +43,7 @@ final class PlatformExtras
         $weighted = fn (string $metric): ?float => $this->weighted($metric, $from, $to);
         $lifetime = $this->db->value(
             "SELECT SUM(value) FROM metric_totals t WHERE platform = 'youtube' AND metric = 'views' AND episode_id = 0
+             AND ref NOT IN (SELECT external_id FROM social_posts WHERE platform = 'youtube_shorts')
              AND captured_at = (SELECT MAX(captured_at) FROM metric_totals WHERE platform = 'youtube' AND metric = 'views' AND ref = t.ref)",
         );
         return [
@@ -52,7 +53,7 @@ final class PlatformExtras
             ['metric' => 'likes', 'label' => 'Likes', 'value' => $this->metrics->metricValue('youtube', 'likes', $from, $to)],
             ['metric' => 'comments', 'label' => 'Kommentare', 'value' => $this->metrics->metricValue('youtube', 'comments', $from, $to)],
             ['metric' => 'subscribersGained', 'label' => 'Neue Abonnenten', 'value' => $this->metrics->metricValue('youtube', 'subscribersGained', $from, $to)],
-            ['metric' => 'lifetimeViews', 'label' => 'Aufrufe gesamt (aktueller Zähler aller Videos)', 'value' => $lifetime === null ? null : (float) $lifetime],
+            ['metric' => 'lifetimeViews', 'label' => 'Aufrufe gesamt (aktueller Zähler aller Videos ohne Shorts)', 'value' => $lifetime === null ? null : (float) $lifetime],
         ];
     }
 
@@ -110,7 +111,10 @@ final class PlatformExtras
     public static function notes(string $platform): array
     {
         return match ($platform) {
-            'youtube' => ['Tageswerte aus YouTube Analytics kommen mit 1 bis 3 Tagen Verzug. Der aktuelle Gesamtzähler stammt aus der Data API.'],
+            'youtube' => [
+                'Tageswerte aus YouTube Analytics kommen mit 1 bis 3 Tagen Verzug. Der aktuelle Gesamtzähler stammt aus der Data API.',
+                'Shorts zählen nicht zum Podcast. Ihre Zahlen stehen unter Social Media.',
+            ],
             'spotify' => ['Spotify hat keine Schnittstelle für Creator. Die Werte holt die Routine „Podcast-Zahlen holen“ als CSV aus Spotify for Creators.'],
             'apple' => ['Apple zählt Geräte. Diese Werte zählen nicht in die Reichweite, weil Apple-Hörer schon in den Feed-Downloads stecken.', 'Bewertungen kommen automatisch ins Postfach. Antwort bei Apple nicht möglich.'],
             'amazon', 'deezer' => ['Zählt nicht in die Reichweite, weil diese Hörer schon in den Feed-Downloads stecken.', 'Die Werte holt ab Stufe 2 die Routine.'],

@@ -6,6 +6,7 @@ namespace Cockpit\Connectors;
 
 use Cockpit\Counting\IabCounter;
 use Cockpit\Counting\LogParser;
+use Cockpit\Counting\SocialVisits;
 use Cockpit\Db;
 
 /**
@@ -24,6 +25,7 @@ final class DownloadsLogsConnector implements Connector
         private readonly ?string $logDir,
         private readonly string $glob = 'access_log*',
         private readonly int $budgetSeconds = 200,
+        private readonly ?SocialVisits $socialVisits = null,
     ) {
     }
 
@@ -106,6 +108,7 @@ final class DownloadsLogsConnector implements Connector
                         $newHwm = $utc;
                     }
                     $this->counter->add($event);
+                    $this->socialVisits?->add($event);
                     $lines++;
                     if (++$batch >= 2000) {
                         $this->db->pdo->exec('COMMIT');

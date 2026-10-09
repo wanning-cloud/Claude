@@ -8,6 +8,9 @@ import type {
   ImportPreview,
   Overview,
   PlatformPage,
+  SocialChannel,
+  SocialPage,
+  SocialPost,
   SyncResult,
 } from '@cockpit/shared';
 
@@ -87,6 +90,12 @@ export const api = {
   patchComment: (id: number, patch: CommentPatch) => request<Comment>('PATCH', `/comments/${id}`, patch),
   reply: (id: number, text: string) => request<Comment>('POST', `/comments/${id}/reply`, { text }),
   automation: () => request<Automation & { connections: (Automation['connections'][number] & { configured?: boolean })[] }>('GET', '/automation'),
+  social: (channel: SocialChannel, r: RangeQuery) =>
+    request<SocialPage>('GET', `/social?${new URLSearchParams({ channel, ...(r as Record<string, string>) })}`),
+  setPostSeries: (id: number, series: string | null) => request<SocialPost>('PATCH', `/social/posts/${id}`, { series }),
+  setGroupWeek: (week: string, answers: number, note: string | null) =>
+    request<{ week: string; answers: number; note: string | null }>('PUT', `/social/groups/${week}`, { answers, note }),
+  disconnectMeta: () => request<{ ok: boolean }>('POST', '/meta/disconnect'),
   sync: (source: string) => request<SyncResult>('POST', `/sync/${source}`),
   importPreview: (body: ImportBody) => request<ImportPreview>('POST', '/import/preview', body),
   importCommit: (body: ImportBody) => request<ImportPreview & { imported: boolean; message: string }>('POST', '/import/commit', body),

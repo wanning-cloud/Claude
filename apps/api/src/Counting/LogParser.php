@@ -12,7 +12,7 @@ final class LogParser
 {
     private const PATTERN = '/^(?:\S+\s+)?(?P<ip>[0-9a-fA-F:.x*]+)\s+\S+\s+\S+\s+\[(?P<time>[^\]]+)\]\s+"(?P<method>[A-Z]+)\s+(?P<path>\S+)(?:\s+[^"]*)?"\s+(?P<status>\d{3})\s+(?P<bytes>\d+|-)(?:\s+"(?P<referer>(?:[^"\\\\]|\\\\.)*)"\s+"(?P<ua>(?:[^"\\\\]|\\\\.)*)")?/';
 
-    /** @return array{ip: string, time: string, method: string, path: string, status: int, bytes: int, ua: string}|null */
+    /** @return array{ip: string, time: string, method: string, path: string, query: string, status: int, bytes: int, ua: string}|null */
     public static function parse(string $line): ?array
     {
         if (!preg_match(self::PATTERN, $line, $m)) {
@@ -27,6 +27,7 @@ final class LogParser
             'time' => $time->format(DATE_ATOM),
             'method' => $m['method'],
             'path' => rawurldecode((string) parse_url($m['path'], PHP_URL_PATH)),
+            'query' => (string) parse_url($m['path'], PHP_URL_QUERY),
             'status' => (int) $m['status'],
             'bytes' => $m['bytes'] === '-' ? 0 : (int) $m['bytes'],
             'ua' => stripcslashes($m['ua'] ?? ''),

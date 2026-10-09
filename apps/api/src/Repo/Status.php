@@ -19,8 +19,15 @@ final class Status
         'youtube_stats' => 'YouTube-Zahlen',
         'apple_reviews' => 'Apple-Bewertungen',
         'downloads' => 'Downloads (Server-Logs)',
+        'meta_comments' => 'Instagram- und Facebook-Kommentare',
+        'instagram' => 'Instagram (Beiträge und Zahlen)',
+        'instagram_stories' => 'Instagram-Stories',
+        'facebook' => 'Facebook-Seite (Beiträge und Zahlen)',
         'backup' => 'Datenbank-Sicherung',
     ];
+
+    /** Social sources only appear on the Automatik page once Meta is connected (or they ran before). */
+    public const META_SOURCES = ['meta_comments', 'instagram', 'instagram_stories', 'facebook'];
 
     /** Routine sources of stage 1 (Spotify) and stage 2 (Apple, Amazon). */
     public const ROUTINE_SOURCES = ['spotify' => 'Spotify (Routine)', 'apple' => 'Apple Podcasts (Routine)', 'amazon' => 'Amazon Music (Routine)'];
@@ -38,6 +45,27 @@ final class Status
             'website' => ['at' => null, 'via' => null, 'missing' => 'Der Website-Player wird in Stufe 2 angebunden.'],
             default => $this->routineStamp($platform),
         };
+    }
+
+    /**
+     * Stamp of a social channel. @param array{connected: bool, instagram: bool, facebook: bool}|null $meta null = Meta not configured
+     * @return array{at: string|null, via: string|null, missing?: string}
+     */
+    public function socialStamp(string $platform, ?array $meta): array
+    {
+        if ($platform === 'youtube_shorts') {
+            return $this->serverStamp('youtube_stats', 'API', 'YouTube ist noch nicht verbunden.');
+        }
+        $missing = match (true) {
+            $meta === null => 'Meta-App ist noch nicht eingerichtet (siehe Automatik › Verbindungen).',
+            !$meta['connected'] => 'Meta ist noch nicht verbunden. Unter Automatik „Meta verbinden“ klicken.',
+            $platform === 'instagram' && !$meta['instagram'] => 'Instagram ist nicht mit der Facebook-Seite verknüpft (Profikonto nötig).',
+            default => null,
+        };
+        if ($missing !== null) {
+            return ['at' => null, 'via' => null, 'missing' => $missing];
+        }
+        return $this->serverStamp($platform, 'API', 'Noch kein Lauf. Der erste Abruf kommt mit dem nächsten Cron-Lauf oder über „Jetzt aktualisieren“.');
     }
 
     /** @return array{at: string|null, via: string|null, missing?: string} */
@@ -117,6 +145,9 @@ final class Status
         $out = [];
         $now = Clock::now();
         foreach (self::SERVER_SOURCES as $id => $label) {
+            if (in_array($id, self::META_SOURCES, true) && !in_array($id, $enabled, true) && $this->lastSuccess($id) === null) {
+                continue;
+            }
             $last = $this->db->one('SELECT started_at, finished_at, ok, message FROM sync_runs WHERE source = ? ORDER BY started_at DESC LIMIT 1', [$id]);
             $success = $this->lastSuccess($id);
             $next = in_array($id, $enabled, true) ? Schedule::next($id, $last['started_at'] ?? null, $now) : null;

@@ -17,7 +17,7 @@ const PATTERNS = [
   ['Bearer token', /Bearer [A-Za-z0-9._-]{30,}/],
   [
     'Filled secret in env',
-    /^(ENCRYPTION_KEY|ADMIN_TOKEN_SECRET|CRON_KEY|GOOGLE_CLIENT_SECRET|OP3_TOKEN|ROUTINE_FIRE_TOKEN|ANTHROPIC_API_KEY)=(?!e2e-|dev-|test)\S{8,}/m,
+    /^(ENCRYPTION_KEY|ADMIN_TOKEN_SECRET|CRON_KEY|GOOGLE_CLIENT_SECRET|META_APP_SECRET|OP3_TOKEN|ROUTINE_FIRE_TOKEN|ANTHROPIC_API_KEY)=(?!e2e-|dev-|test)\S{8,}/m,
   ],
   ['Password hash', /\$2y\$1\d\$[./A-Za-z0-9]{53}/],
 ];

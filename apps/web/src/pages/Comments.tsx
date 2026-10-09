@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COMMENT_STATUS_LABEL, formatDateTime, formatNumber, PLATFORM_INFO, type Comment, type CommentStatus, type Platform } from '@cockpit/shared';
+import { COMMENT_STATUS_LABEL, formatDateTime, formatNumber, sourceName, type Comment, type CommentPlatform, type CommentStatus } from '@cockpit/shared';
 import { api } from '../api.ts';
 import { PageHead } from '../components/Bits.tsx';
 import { PlatformIcon } from '../components/PlatformIcon.tsx';
 import { Empty, ErrorBox, PageLoading, Skeleton } from '../components/States.tsx';
 
-const FILTER_PLATFORMS: Platform[] = ['youtube', 'spotify', 'apple'];
+const FILTER_PLATFORMS: CommentPlatform[] = ['youtube', 'spotify', 'apple', 'instagram', 'facebook'];
+const AREAS = [
+  { id: '', label: 'Alle Bereiche' },
+  { id: 'podcast', label: 'Podcast' },
+  { id: 'social', label: 'Social Media' },
+] as const;
 const STATUSES: CommentStatus[] = ['new', 'answered', 'later', 'done'];
 
 export default function Comments() {
@@ -16,6 +21,7 @@ export default function Comments() {
   const selectedId = Number(useParams().id) || null;
   const filter = {
     platform: params.get('platform') ?? '',
+    area: params.get('area') ?? '',
     status: params.get('status') ?? '',
     episode: params.get('episode') ?? '',
     page: params.get('page') ?? '1',
@@ -60,12 +66,22 @@ export default function Comments() {
   const filters = (
     <div className="mb-6 flex flex-wrap items-end gap-3">
       <label className="grid gap-1">
+        <span className="label">Bereich</span>
+        <select className="field w-44" value={filter.area} onChange={(e) => setFilter('area', e.target.value)}>
+          {AREAS.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1">
         <span className="label">Portal</span>
         <select className="field w-44" value={filter.platform} onChange={(e) => setFilter('platform', e.target.value)}>
           <option value="">Alle Portale</option>
           {FILTER_PLATFORMS.map((p) => (
             <option key={p} value={p}>
-              {PLATFORM_INFO[p].name}
+              {sourceName(p)}
             </option>
           ))}
         </select>
@@ -99,12 +115,12 @@ export default function Comments() {
     <>
       <PageHead
         title="Kommentare"
-        lead={`${formatNumber(newCount)} neu · ${formatNumber(total)} im Filter. YouTube beantwortest du direkt hier, Spotify über die Routine, Apple nur lesen.`}
+        lead={`${formatNumber(newCount)} neu · ${formatNumber(total)} im Filter. YouTube, Instagram und Facebook beantwortest du direkt hier, Spotify über die Routine, Apple nur lesen.`}
       />
       {filters}
       {items.length === 0 ? (
         <Empty title={filter.status === 'new' ? 'Alles beantwortet.' : 'Keine Kommentare in diesem Filter.'}>
-          Neue YouTube-Kommentare kommen alle 30 Minuten, Apple-Bewertungen täglich, Spotify-Kommentare mit der Routine.
+          Neue YouTube-Kommentare kommen alle 30 Minuten, Instagram und Facebook alle 15 Minuten, Apple-Bewertungen täglich, Spotify-Kommentare mit der Routine.
         </Empty>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -115,7 +131,7 @@ export default function Comments() {
                   <Link
                     to={`/kommentare/${c.id}${qs}`}
                     aria-current={c.id === selectedId ? 'true' : undefined}
-                    aria-label={`${PLATFORM_INFO[c.platform].name}, ${c.author}, ${COMMENT_STATUS_LABEL[c.status]}: ${c.text.slice(0, 80)}`}
+                    aria-label={`${sourceName(c.platform)}, ${c.author}, ${COMMENT_STATUS_LABEL[c.status]}: ${c.text.slice(0, 80)}`}
                     className="block no-underline"
                   >
                     <CommentCard comment={c} compact active={c.id === selectedId} />
@@ -162,9 +178,10 @@ export function CommentCard({ comment: c, compact = false, active = false }: { c
     >
       <header className="mb-2 flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1.5 text-[0.875rem] font-bold">
-          <PlatformIcon platform={c.platform} size={16} />
-          {PLATFORM_INFO[c.platform].name}
+          <PlatformIcon platform={c.isShort ? 'youtube_shorts' : c.platform} size={16} />
+          {c.isShort ? 'YouTube Short' : sourceName(c.platform)}
         </span>
+        {c.area === 'social' && <span className="tag bg-paper">Social</span>}
         {c.status === 'new' ? <span className="sticker">Neu</span> : <span className="tag">{COMMENT_STATUS_LABEL[c.status]}</span>}
         {c.rating !== null && (
           <span className="tag bg-blue text-white" aria-label={`${c.rating} von 5 Sternen`}>
@@ -245,7 +262,7 @@ function Detail({ comment: c, backTo }: { comment: Comment; backTo: string }) {
           }}
         >
           <label htmlFor="reply-text" className="label">
-            Deine Antwort {c.replyMode === 'queue' ? '(Spotify: wird beim nächsten Routine-Lauf gepostet)' : '(YouTube: geht sofort raus)'}
+            Deine Antwort {c.replyMode === 'queue' ? '(Spotify: wird beim nächsten Routine-Lauf gepostet)' : `(${sourceName(c.platform)}: geht sofort raus)`}
           </label>
           <textarea
             id="reply-text"
@@ -278,7 +295,7 @@ function Detail({ comment: c, backTo }: { comment: Comment; backTo: string }) {
             </button>
             {c.externalUrl && (
               <a className="btn" href={c.externalUrl} target="_blank" rel="noreferrer">
-                Auf {PLATFORM_INFO[c.platform].name} öffnen
+                Auf {sourceName(c.platform)} öffnen
               </a>
             )}
           </div>
@@ -303,7 +320,7 @@ function Detail({ comment: c, backTo }: { comment: Comment; backTo: string }) {
         </button>
         {c.replyMode === 'none' && c.externalUrl && (
           <a className="btn btn-sm" href={c.externalUrl} target="_blank" rel="noreferrer">
-            Bei {PLATFORM_INFO[c.platform].name} ansehen
+            Bei {sourceName(c.platform)} ansehen
           </a>
         )}
       </div>

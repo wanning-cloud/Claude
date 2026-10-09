@@ -1,15 +1,20 @@
-import { siApplepodcasts, siDeezer, siSpotify, siYoutube } from 'simple-icons';
-import { PLATFORM_INFO, type Platform } from '@cockpit/shared';
+import { siApplepodcasts, siDeezer, siFacebook, siInstagram, siSpotify, siYoutube, siYoutubeshorts } from 'simple-icons';
+import { sourceName, type CommentPlatform, type SocialPlatform } from '@cockpit/shared';
 
-const PATHS: Partial<Record<Platform, string>> = {
+type Source = CommentPlatform | SocialPlatform;
+
+const PATHS: Partial<Record<Source, string>> = {
   youtube: siYoutube.path,
+  youtube_shorts: siYoutubeshorts.path,
   spotify: siSpotify.path,
   apple: siApplepodcasts.path,
   deezer: siDeezer.path,
+  instagram: siInstagram.path,
+  facebook: siFacebook.path,
 };
 
 /** Platform logos in ink (Simple Icons). Own glyphs for platforms without a usable logo. */
-export function PlatformIcon({ platform, size = 20 }: { platform: Platform; size?: number }) {
+export function PlatformIcon({ platform, size = 20 }: { platform: Source; size?: number }) {
   const path = PATHS[platform];
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" className="shrink-0 fill-ink">
@@ -27,11 +32,11 @@ export function PlatformIcon({ platform, size = 20 }: { platform: Platform; size
   );
 }
 
-export function PlatformName({ platform, size }: { platform: Platform; size?: number }) {
+export function PlatformName({ platform, size }: { platform: Source; size?: number }) {
   return (
     <span className="inline-flex items-center gap-2">
       <PlatformIcon platform={platform} size={size} />
-      <span>{PLATFORM_INFO[platform].name}</span>
+      <span>{sourceName(platform)}</span>
     </span>
   );
 }

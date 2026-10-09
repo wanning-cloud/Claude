@@ -9,10 +9,15 @@ use Cockpit\Connectors\AppleReviewsConnector;
 use Cockpit\Connectors\BackupJob;
 use Cockpit\Connectors\Connector;
 use Cockpit\Connectors\DownloadsLogsConnector;
+use Cockpit\Connectors\FacebookConnector;
 use Cockpit\Connectors\FeedConnector;
+use Cockpit\Connectors\InstagramConnector;
+use Cockpit\Connectors\InstagramStoriesConnector;
+use Cockpit\Connectors\MetaCommentsConnector;
 use Cockpit\Connectors\YouTubeCommentsConnector;
 use Cockpit\Connectors\YouTubeStatsConnector;
 use Cockpit\Counting\IabCounter;
+use Cockpit\Counting\SocialVisits;
 use Cockpit\Counting\UserAgents;
 use Cockpit\Google\YouTubeApi;
 use Cockpit\Google\YouTubeAuth;
@@ -23,8 +28,11 @@ use Cockpit\Http\Router;
 use Cockpit\Import\EpisodeMatcher;
 use Cockpit\Import\ImportService;
 use Cockpit\Import\SpotifyCsv;
+use Cockpit\Meta\MetaApi;
+use Cockpit\Meta\MetaAuth;
 use Cockpit\Repo\Comments;
 use Cockpit\Repo\Metrics;
+use Cockpit\Repo\Social;
 use Cockpit\Repo\Status;
 use Cockpit\Sync\SyncRunner;
 
@@ -35,6 +43,7 @@ final class App
     private ?AdminSession $session = null;
     private ?SyncRunner $runner = null;
     private ?YouTubeAuth $youtubeAuth = null;
+    private ?MetaAuth $metaAuth = null;
     /** Seconds one run may spend on catching up access logs: cron 200, a button click in the browser 40. */
     private int $logBudget = 200;
 
@@ -68,6 +77,21 @@ final class App
         return $this->youtubeAuth;
     }
 
+    public function metaAuth(): ?MetaAuth
+    {
+        if ($this->metaAuth === null && $this->config->get('META_APP_ID') !== null && $this->config->get('META_APP_SECRET') !== null
+            && $this->config->get('META_REDIRECT_URI') !== null && $this->config->get('ENCRYPTION_KEY') !== null) {
+            $this->metaAuth = new MetaAuth($this->db(), $this->http, $this->config, new Crypto($this->config->require('ENCRYPTION_KEY')));
+        }
+        return $this->metaAuth;
+    }
+
+    private function metaApi(): ?MetaApi
+    {
+        $auth = $this->metaAuth();
+        return $auth !== null && $auth->isConnected() ? new MetaApi($this->http, $auth, $auth->version()) : null;
+    }
+
     private function youtubeApi(): ?YouTubeApi
     {
         $auth = $this->youtubeAuth();
@@ -93,14 +117,27 @@ final class App
             $storefronts = array_values(array_filter(array_map('trim', explode(',', $this->config->get('APPLE_STOREFRONTS', 'de')))));
             $add(new AppleReviewsConnector($db, $this->http, $this->config->get('APPLE_PODCAST_ID', '6819469570'), $storefronts));
             if ($this->config->get('ACCESS_LOG_DIR') !== null) {
-                $counter = new IabCounter($db, new UserAgents(dirname(__DIR__) . '/data'));
+                $agents = new UserAgents(dirname(__DIR__) . '/data');
                 $add(new DownloadsLogsConnector(
                     $db,
-                    $counter,
+                    new IabCounter($db, $agents),
                     self::resolveLogDir((string) $this->config->get('ACCESS_LOG_DIR'), __DIR__),
                     $this->config->get('ACCESS_LOG_GLOB', 'access_log*'),
                     $this->logBudget,
+                    new SocialVisits($db, $agents),
                 ));
+            }
+            $meta = $this->metaApi();
+            if ($meta !== null) {
+                $auth = $this->metaAuth();
+                $add(new MetaCommentsConnector($db, $meta, $auth));
+                if ($auth->igUserId() !== null) {
+                    $add(new InstagramConnector($db, $meta, $auth));
+                    $add(new InstagramStoriesConnector($db, $meta, $auth));
+                }
+                if ($auth->pageId() !== null) {
+                    $add(new FacebookConnector($db, $meta, $auth));
+                }
             }
             $add(new BackupJob($db, $this->config->get('BACKUP_DIR', dirname($this->config->get('DATABASE_PATH', dirname(__DIR__) . '/data/cockpit.sqlite')) . '/backups')));
             $this->runner = new SyncRunner($db, $connectors);
@@ -152,6 +189,7 @@ final class App
         $r->add('GET', '/platforms/{platform}', fn (Request $q): Response => Response::json($this->platform($q->params['platform'], $q)));
         $r->add('GET', '/comments', fn (Request $q): Response => Response::json((new Comments($this->db()))->list([
             'platform' => $q->q('platform'),
+            'area' => $q->q('area'),
             'episode' => $q->q('episode') === null ? null : (int) $q->q('episode'),
             'status' => $q->q('status'),
             'page' => (int) $q->q('page', '1'),
@@ -159,6 +197,9 @@ final class App
         $r->add('GET', '/comments/{id}', fn (Request $q): Response => Response::json((new Comments($this->db()))->get((int) $q->params['id'])));
         $r->add('PATCH', '/comments/{id}', fn (Request $q): Response => Response::json($this->patchComment((int) $q->params['id'], $q->json())));
         $r->add('POST', '/comments/{id}/reply', fn (Request $q): Response => Response::json($this->reply((int) $q->params['id'], $q->json())));
+        $r->add('GET', '/social', fn (Request $q): Response => Response::json($this->social($q)));
+        $r->add('PATCH', '/social/posts/{id}', fn (Request $q): Response => Response::json($this->patchSocialPost((int) $q->params['id'], $q->json())));
+        $r->add('PUT', '/social/groups/{week}', fn (Request $q): Response => Response::json($this->putGroupWeek($q->params['week'], $q->json())));
         $r->add('GET', '/automation', fn (): Response => Response::json($this->automation()));
         $r->add('POST', '/sync/{source}', fn (Request $q): Response => Response::json($this->syncNow($q->params['source'])));
         $r->add('POST', '/import/preview', fn (Request $q): Response => Response::json($this->importService()->preview($this->importInput($q))));
@@ -171,6 +212,9 @@ final class App
         $r->add('GET', '/youtube/connect', fn (): Response => $this->youtubeConnect());
         $r->add('GET', '/youtube/callback', fn (Request $q): Response => $this->youtubeCallback($q));
         $r->add('POST', '/youtube/disconnect', fn (): Response => Response::json($this->youtubeDisconnect()));
+        $r->add('GET', '/meta/connect', fn (): Response => $this->metaConnect());
+        $r->add('GET', '/meta/callback', fn (Request $q): Response => $this->metaCallback($q));
+        $r->add('POST', '/meta/disconnect', fn (): Response => Response::json($this->metaDisconnect()));
         $r->add('GET', '/cron', fn (Request $q): Response => Response::json($this->cron($q)));
         return $r;
     }
@@ -434,7 +478,52 @@ final class App
         if ($text === '' || mb_strlen($text) > 10000) {
             throw new HttpException(422, 'Die Antwort ist leer oder zu lang.');
         }
-        return (new Comments($this->db()))->reply($id, $text, $this->session()->user(), $this->youtubeApi());
+        return (new Comments($this->db()))->reply($id, $text, $this->session()->user(), $this->youtubeApi(), $this->metaApi());
+    }
+
+    // ---------------------------------------------------------------- social media
+
+    /** Social media area. Own tables, own page: never part of the podcast reach. */
+    private function social(Request $request): array
+    {
+        $db = $this->db();
+        $range = self::range($request, $db);
+        $status = new Status($db);
+        $stamps = [];
+        foreach (Social::PLATFORMS as $p) {
+            $stamps[$p] = $status->socialStamp($p, $this->metaAuth()?->status());
+        }
+        $page = (new Social($db))->page($range, self::previous($range), (string) $request->q('channel', 'all'), $stamps);
+        $meta = $this->metaAuth()?->status();
+        $page['connection'] = [
+            'metaConfigured' => $this->metaAuth() !== null,
+            'metaConnected' => $meta['connected'] ?? false,
+            'instagram' => $meta['instagram'] ?? false,
+            'facebook' => $meta['facebook'] ?? false,
+            'youtube' => $this->youtubeAuth()?->isConnected() ?? false,
+        ];
+        return $page;
+    }
+
+    private function patchSocialPost(int $id, array $body): array
+    {
+        if (!array_key_exists('series', $body) || ($body['series'] !== null && !is_string($body['series']))) {
+            throw new HttpException(422, 'Serie fehlt.');
+        }
+        return (new Social($this->db()))->setSeries($id, $body['series'], $this->session()->user());
+    }
+
+    private function putGroupWeek(string $week, array $body): array
+    {
+        $answers = $body['answers'] ?? null;
+        if (!is_int($answers)) {
+            throw new HttpException(422, 'Anzahl der Antworten als Zahl angeben.');
+        }
+        $note = $body['note'] ?? null;
+        if ($note !== null && !is_string($note)) {
+            throw new HttpException(422, 'Notiz ungültig.');
+        }
+        return (new Social($this->db()))->setGroupLog($week, $answers, $note, $this->session()->user());
     }
 
     // ---------------------------------------------------------------- automation
@@ -450,12 +539,22 @@ final class App
             'suggestions' => $matcher->suggestions((string) $a['foreign_title']),
         ], $db->all("SELECT * FROM episode_aliases WHERE status = 'pending' ORDER BY created_at"));
         $yt = $this->youtubeAuth()?->status() ?? ['connected' => false, 'expiresAt' => null, 'account' => null];
+        $meta = $this->metaAuth()?->status() ?? ['connected' => false, 'account' => null, 'facebook' => false, 'instagram' => false, 'instagramUsername' => null];
         $routineAvailable = $this->config->get('ROUTINE_FIRE_URL') !== null;
         return [
             'sources' => (new Status($db))->sources(array_keys($this->runner()->connectors())),
             'queue' => (new Comments($db))->queue(),
             'connections' => [
                 ['platform' => 'youtube', 'connected' => $yt['connected'], 'expiresAt' => $yt['expiresAt'], 'account' => $yt['account'], 'configured' => $this->youtubeAuth() !== null],
+                [
+                    'platform' => 'meta',
+                    'connected' => $meta['connected'],
+                    'expiresAt' => null,
+                    'account' => $meta['account'],
+                    'configured' => $this->metaAuth() !== null,
+                    'facebook' => $meta['facebook'],
+                    'instagram' => $meta['instagram'],
+                ],
             ],
             'pendingAliases' => $pending,
             'routineTrigger' => [
@@ -613,6 +712,46 @@ final class App
     {
         $this->youtubeAuth()?->disconnect();
         $this->db()->audit($this->session()->user(), 'youtube.disconnected');
+        return ['ok' => true];
+    }
+
+    // ---------------------------------------------------------------- Meta OAuth (Instagram + Facebook page)
+
+    private function metaConnect(): Response
+    {
+        $auth = $this->metaAuth() ?? throw new HttpException(409, 'Meta-Zugang ist noch nicht eingerichtet (META_APP_ID, META_APP_SECRET und META_REDIRECT_URI in der analytics.env).');
+        $state = bin2hex(random_bytes(16));
+        $this->db()->setSetting('oauth.meta_state', $state . '|' . Clock::nowIso());
+        return Response::redirect($auth->authorizationUrl($state));
+    }
+
+    private function metaCallback(Request $request): Response
+    {
+        $back = rtrim($this->config->get('PUBLIC_ORIGIN', ''), '/') . '/podcast-admin/analytics/automatik';
+        $stored = explode('|', (string) $this->db()->setting('oauth.meta_state'));
+        $this->db()->run("DELETE FROM settings WHERE key = 'oauth.meta_state'");
+        $valid = count($stored) === 2 && hash_equals($stored[0], (string) $request->q('state'))
+            && Clock::parse($stored[1]) > Clock::now()->modify('-15 minutes');
+        if (!$valid) {
+            return Response::redirect($back . '?meta=fehler&grund=' . rawurlencode('Anmeldung abgelaufen. Bitte noch einmal „Meta verbinden“ klicken.'));
+        }
+        if ($request->q('error') !== null || $request->q('code') === null) {
+            return Response::redirect($back . '?meta=fehler&grund=' . rawurlencode('Bei Meta abgebrochen.'));
+        }
+        try {
+            $auth = $this->metaAuth() ?? throw new \RuntimeException('Meta-Zugang ist nicht eingerichtet.');
+            $result = $auth->connect((string) $request->q('code'));
+            $this->db()->audit('meta', 'meta.connected', $result['page'], $result);
+        } catch (\Throwable $e) {
+            return Response::redirect($back . '?meta=fehler&grund=' . rawurlencode($e->getMessage()));
+        }
+        return Response::redirect($back . '?meta=verbunden' . ($result['instagram'] === null ? '&ohne=instagram' : ''));
+    }
+
+    private function metaDisconnect(): array
+    {
+        $this->metaAuth()?->disconnect();
+        $this->db()->audit($this->session()->user(), 'meta.disconnected');
         return ['ok' => true];
     }
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatDate, formatDateTime, PLATFORM_INFO, type ImportPreview, type SyncSourceState } from '@cockpit/shared';
+import { formatDate, formatDateTime, PLATFORM_INFO, type ImportPreview, type MetaConnection, type SyncSourceState } from '@cockpit/shared';
 import { api, API_BASE, type ImportBody, type SpotifyMapping } from '../api.ts';
 import { PageHead, SectionTitle } from '../components/Bits.tsx';
 import { Empty, ErrorBox, Notice, PageLoading } from '../components/States.tsx';
@@ -11,6 +11,7 @@ export default function Automation() {
   const q = useQuery({ queryKey: ['automation'], queryFn: api.automation });
   const [params] = useSearchParams();
   const ytResult = params.get('youtube');
+  const metaResult = params.get('meta');
 
   if (q.isPending) return <PageLoading />;
   if (q.isError) return <ErrorBox error={q.error} onRetry={() => q.refetch()} />;
@@ -35,6 +36,20 @@ export default function Automation() {
       {ytResult === 'fehler' && (
         <div className="mb-6">
           <Notice level="error">YouTube wurde nicht verbunden: {params.get('grund') ?? 'unbekannter Grund'}</Notice>
+        </div>
+      )}
+      {metaResult === 'verbunden' && (
+        <div className="mb-6">
+          <Notice level={params.get('ohne') === 'instagram' ? 'warn' : 'info'}>
+            {params.get('ohne') === 'instagram'
+              ? 'Facebook-Seite ist verbunden. Instagram fehlt noch: Instagram auf Profikonto umstellen, mit der Seite verknüpfen und „Meta verbinden“ erneut klicken.'
+              : 'Instagram und Facebook sind verbunden. Zahlen und Kommentare laufen ab jetzt automatisch unter Social Media.'}
+          </Notice>
+        </div>
+      )}
+      {metaResult === 'fehler' && (
+        <div className="mb-6">
+          <Notice level="error">Meta wurde nicht verbunden: {params.get('grund') ?? 'unbekannter Grund'}</Notice>
         </div>
       )}
 
@@ -64,7 +79,10 @@ export default function Automation() {
         <SectionTitle>
           <span id="conn">Verbindungen</span>
         </SectionTitle>
-        <YoutubeConnection connection={d.connections.find((c) => c.platform === 'youtube')} />
+        <div className="grid gap-4">
+          <YoutubeConnection connection={d.connections.find((c) => c.platform === 'youtube')} />
+          <MetaConnectionCard connection={d.connections.find((c): c is MetaConnection => c.platform === 'meta')} />
+        </div>
       </section>
 
       <section className="mb-10" aria-labelledby="queue">
@@ -206,6 +224,48 @@ function YoutubeConnection({ connection }: { connection: { connected: boolean; a
             disabled={disconnect.isPending}
             onClick={() => {
               if (window.confirm('YouTube trennen? Zahlen und Kommentare werden dann nicht mehr geholt.')) disconnect.mutate();
+            }}
+          >
+            Trennen
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetaConnectionCard({ connection }: { connection: MetaConnection | undefined }) {
+  const qc = useQueryClient();
+  const disconnect = useMutation({ mutationFn: api.disconnectMeta, onSuccess: () => qc.invalidateQueries() });
+  const configured = connection?.configured ?? false;
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-4 p-4">
+      <div className="max-w-[65ch]">
+        <p className="text-lg font-black">Instagram und Facebook-Seite (Meta)</p>
+        <p className="text-[0.9375rem]">
+          {!configured
+            ? 'Meta-App fehlt noch in der analytics.env (META_APP_ID, META_APP_SECRET, META_REDIRECT_URI). Anleitung im README unter „Social Media“.'
+            : connection?.connected
+              ? `Verbunden: ${connection.account ?? 'Seite'}.${connection.instagram ? '' : ' Instagram fehlt: Profikonto mit der Seite verknüpfen, dann neu verbinden.'} Läuft ohne Ablaufdatum, bis du dein Facebook-Passwort änderst oder die App entfernst.`
+              : 'Nicht verbunden. Einmal verbinden, danach laufen Zahlen und Kommentare von Instagram und der Facebook-Seite ohne Zutun. Das Cockpit liest nur und antwortet nur, wenn du auf „Antwort senden“ klickst.'}
+        </p>
+        <p className="mt-1 text-[0.8125rem] text-ink-soft">
+          Facebook-Gruppen hat Meta 2024 für Apps gesperrt. Dafür gibt es unter Social Media ein Wochenprotokoll.
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        {configured && (
+          <a className="btn btn-primary" href={`${API_BASE}/meta/connect`}>
+            {connection?.connected ? 'Neu verbinden' : 'Meta verbinden'}
+          </a>
+        )}
+        {connection?.connected && (
+          <button
+            type="button"
+            className="btn"
+            disabled={disconnect.isPending}
+            onClick={() => {
+              if (window.confirm('Meta trennen? Zahlen und Kommentare von Instagram und Facebook werden dann nicht mehr geholt.')) disconnect.mutate();
             }}
           >
             Trennen

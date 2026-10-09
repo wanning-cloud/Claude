@@ -1,4 +1,5 @@
 import type { Platform } from './platforms.ts';
+import type { SocialPlatform } from './social.ts';
 
 /** Response and request contracts of the PHP API under /api. */
 
@@ -119,9 +120,15 @@ export interface CommentReply {
   error?: string | null;
 }
 
+/** Inbox sources: the podcast platforms plus Instagram and Facebook. Comments on Shorts arrive as "youtube" with isShort. */
+export type CommentPlatform = Platform | Exclude<SocialPlatform, 'youtube_shorts'>;
+
 export interface Comment {
   id: number;
-  platform: Platform;
+  platform: CommentPlatform;
+  /** "social" = Instagram, Facebook and YouTube Shorts; "podcast" = everything else. */
+  area: 'podcast' | 'social';
+  isShort: boolean;
   episode: EpisodeRef | null;
   author: string;
   authorUrl: string | null;
@@ -168,7 +175,7 @@ export interface SyncSourceState {
 export interface QueuedReply {
   id: number;
   commentId: number;
-  platform: Platform;
+  platform: CommentPlatform;
   episode: EpisodeRef | null;
   commentAuthor: string;
   commentText: string;
@@ -185,6 +192,16 @@ export interface Connection {
   account: string | null;
 }
 
+export interface MetaConnection {
+  platform: 'meta';
+  connected: boolean;
+  expiresAt: null;
+  account: string | null;
+  configured: boolean;
+  facebook: boolean;
+  instagram: boolean;
+}
+
 export interface PendingAlias {
   id: number;
   platform: Platform;
@@ -195,7 +212,7 @@ export interface PendingAlias {
 export interface Automation {
   sources: SyncSourceState[];
   queue: QueuedReply[];
-  connections: Connection[];
+  connections: (Connection | MetaConnection)[];
   pendingAliases: PendingAlias[];
   routineTrigger: { available: boolean; hint: string };
 }

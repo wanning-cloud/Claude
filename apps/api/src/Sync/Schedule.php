@@ -20,11 +20,15 @@ final class Schedule
         'youtube_stats' => ['at' => '06:00'],
         'apple_reviews' => ['at' => '06:10'],
         'downloads' => ['every' => 60],
+        'meta_comments' => ['every' => 15],
+        'instagram_stories' => ['every' => 120],
+        'instagram' => ['every' => 360],
+        'facebook' => ['every' => 360],
         'backup' => ['at' => '03:00'],
     ];
 
     /** Order in which a "due" tick runs the jobs: master data first. */
-    public const ORDER = ['backup', 'feed', 'youtube_comments', 'downloads', 'youtube_stats', 'apple_reviews'];
+    public const ORDER = ['backup', 'feed', 'youtube_comments', 'meta_comments', 'instagram_stories', 'downloads', 'youtube_stats', 'apple_reviews', 'instagram', 'facebook'];
 
     public static function isDue(string $job, ?string $lastStart, DateTimeImmutable $now): bool
     {

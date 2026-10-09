@@ -64,6 +64,9 @@ Code: `apps/api/src/Counting/`, `apps/api/src/Repo/Metrics.php`, Tests: `apps/ap
 | Apple-Bewertungen | Server, öffentlicher Bewertungs-Feed | täglich 06:10 |
 | Downloads | Server, all-inkl-Zugriffslogs (`/logs/`, ein `.gz` pro Tag; heutige Downloads erscheinen am Folgetag) | stündlich geprüft |
 | Datenbank-Sicherung | Server, `VACUUM INTO`, 14 Tage | täglich 03:00 |
+| Instagram- und Facebook-Kommentare | Server, Graph API (nur Beiträge mit geänderter Kommentarzahl) | alle 15 Minuten (bei 30-Minuten-Cron alle 30) |
+| Instagram-Stories | Server, Graph API (Zahlen nur, solange die Story live ist) | alle 2 Stunden |
+| Instagram, Facebook-Seite (Beiträge, Tageswerte, Follower) | Server, Graph API | alle 6 Stunden |
 | Spotify (ab Stufe 2: Apple, Amazon) | Claude-Routine „Podcast-Zahlen holen“ | Montag 08:20 und auf Zuruf |
 
 Ein einziger all-inkl-Cronjob ruft alle 30 Minuten `…/api/cron?job=due&key=<CRON_KEY>` auf und startet, was fällig ist. „Jetzt aktualisieren“ im Cockpit startet die Server-Quellen sofort, eine nach der anderen.
@@ -89,6 +92,29 @@ Vorlage: [`apps/api/analytics.env.example`](apps/api/analytics.env.example). Die
 
 **Token erneuern:** Meldet das Cockpit „Verbindung abgelaufen oder widerrufen“, einfach „Neu verbinden“ klicken. Wird `ENCRYPTION_KEY` geändert, sind gespeicherte Tokens unlesbar: dann ebenfalls neu verbinden.
 
+## Social Media (eigene Statistik)
+
+Seite „Social Media“ im Cockpit: Instagram, Facebook-Seite „Der Monteur Podcast“ und YouTube Shorts. Eigene Tabellen (`social_*`, Migration `002_social.sql`), eigener Endpunkt `GET /api/social`. **Nichts davon zählt in die Podcast-Reichweite**, und YouTube Shorts sind seit dieser Version aus den Podcast-Zahlen von YouTube herausgerechnet (Analytics-Bericht nach `creatorContentType` getrennt; beim ersten Lauf wird die ganze YouTube-Historie einmal neu geholt).
+
+- Kacheln je Kanal: Follower (Veränderung im Zeitraum), erreichte Konten (Summe der Tageswerte), Aufrufe, Interaktionen, Engagement-Rate.
+- Engagement-Rate je Beitrag = (Likes + Kommentare + Gespeichert + Geteilt) ÷ Reichweite; Facebook-Likes = alle Reaktionen; Shorts: (Likes + Kommentare) ÷ Aufrufe. Mehrere Beiträge: Summe ÷ Summe.
+- Ziele aus der Strategie: 150 Instagram-Follower, 100 YouTube-Abos, 7 Clips pro Woche (höhere Zahl aus Reels und Shorts, nicht die Summe).
+- „Welche Serie trägt?“: Serie aus dem Hashtag (`#fehlerderwoche`, `#rechnungin60sekunden`, `#dispofrage`, `#antwortderwoche`), „Clip aus einer Folge“ bei „Folge NN“ in der Caption, sonst von Hand je Beitrag.
+- Besuche auf monteur-podcast.de über Links mit `utm_source=instagram|facebook|youtube_shorts|fb_gruppe` (aus den Zugriffs-Logs, ohne Bots, Seitenaufrufe statt Personen).
+- Facebook-Gruppen: keine Schnittstelle mehr (Meta hat die Groups API 2024 abgeschaltet). Wochenprotokoll „Antworten in Gruppen“ von Hand.
+- Kommentare von Instagram, Facebook und Shorts landen im Postfach (Filter „Bereich“). Antworten gehen erst beim Klick auf „Antwort senden“ raus. Kein Löschen, kein automatisches Antworten.
+
+### Meta verbinden (einmalig)
+
+1. Instagram auf **Profikonto** (Business oder Creator) umstellen und in Instagram › Konten-Center mit der Facebook-Seite „Der Monteur Podcast“ verknüpfen.
+2. developers.facebook.com › „App erstellen“, Typ **Business**, Markus als Admin. Produkt **Facebook Login** (oder „Facebook Login for Business“ mit einer Konfiguration, dann deren ID als `META_CONFIG_ID`).
+3. Gültige OAuth-Redirect-URI: `https://monteur-podcast.de/podcast-admin/analytics/api/meta/callback`.
+4. Berechtigungen: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`, `pages_manage_engagement`, `read_insights`, `instagram_basic`, `instagram_manage_insights`, `instagram_manage_comments`. Weil die App nur Markus' eigene Seite liest und Markus Admin der App ist, reicht der Standardzugriff; ein App-Review ist dafür nach Meta-Doku nicht nötig (vor dem ersten Verbinden prüfen, siehe `docs/offene-pruefungen.md`).
+5. App-ID und App-Geheimnis in die `analytics.env` eintragen (`META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`), Markus selbst.
+6. Cockpit › Automatik › „Meta verbinden“, mit Markus' Facebook-Konto anmelden, die Seite „Der Monteur Podcast“ und das Instagram-Konto freigeben.
+
+Das Seiten-Token läuft nicht ab. Ändert Markus sein Facebook-Passwort oder entfernt er die App, meldet das Cockpit „Meta neu verbinden“.
+
 ## Sicherung zurückspielen
 
 Sicherungen liegen in `BACKUP_DIR` als `cockpit-JJJJ-MM-TT_HHMMSS.sqlite` (14 Tage).
@@ -103,3 +129,4 @@ Sicherungen liegen in `BACKUP_DIR` als `cockpit-JJJJ-MM-TT_HHMMSS.sqlite` (14 Ta
 - **Stufe 1 (dieses Repo):** Login über podcast-admin, Feed, YouTube (Zahlen, Kommentare, Antworten), Apple-Bewertungen, Downloads aus Logs, Server-Sync mit Knopf, Import mit Erkennung der echten Spotify- und Amazon-Exporte, Routinen, Übersicht, Folgen, Portale, Postfach, Automatik, Sicherung, Tests.
 - **Stufe 2:** Apple/Amazon in der Routine, Spotify-Kommentare, Knopf „Plattform-Daten holen“, Wochenbericht, Website-Beacon, bester Veröffentlichungszeitpunkt, Apps/Länder, YouTube-Moderation, Kennzeichnen, Benachrichtigung.
 - **Stufe 3 (gewünscht):** KI-Antwortentwürfe, Postfach frag@.
+- **Social Media (09.10.2026):** Instagram, Facebook-Seite, YouTube Shorts als eigene Statistik, Kommentare im Postfach, Shorts aus den Podcast-Zahlen getrennt, UTM-Besuche, Wochenprotokoll Facebook-Gruppen.
